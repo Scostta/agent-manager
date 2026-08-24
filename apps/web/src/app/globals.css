@@ -1,3 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Capa de tokens: fuente de verdad del diseño (ver docs/design/cockpit.css).
+   tailwind.config.mjs mapea estas variables a utilidades, así que un cambio
+   aquí se propaga a toda la app — incluido el accent en caliente. */
+:root {
+  /* Backgrounds */
+  --bg-base:    #080809;
+  --bg-2:       #0D0D10;
+  --bg-3:       #131318;
+  --bg-4:       #1A1A20;
+  --bg-5:       #222229;
+  --bg-hover:   #1E1E26;
+  --bg-active:  #26262F;
+
+  /* Borders */
+  --border-1:   #1E1E26;
+  --border-2:   #28282F;
+  --border-3:   #333340;
+
+  /* Text */
+  --text-1:     #EEEEF3;
+  --text-2:     #9696A8;
+  --text-3:     #56566A;
+  --text-inv:   #08080A;
+
+  /* Accent — cool violet */
+  --accent:       #7B6CF6;
+  --accent-dim:   #2A2550;
+  --accent-hover: #9081F8;
+  --accent-fg:    #FFFFFF;
+
+  /* Status */
+  --green:      #3FBA6E;
+  --green-dim:  #1A3A28;
+  --yellow:     #C9961A;
+  --yellow-dim: #352800;
+  --red:        #E05050;
+  --red-dim:    #3A1818;
+  --blue:       #4A9EE8;
+  --blue-dim:   #162840;
+  --orange:     #D9784A;
+  --orange-dim: #351A0A;
+
+  /* Layout */
+  --sidebar-w: 200px;
+  --header-h:  44px;
+}
+
+@layer base {
+  * {
+    @apply border-border-1;
+  }
+
+  html,
+  body {
+    height: 100%;
+    background: var(--bg-base);
+    color: var(--text-1);
+    font-family: theme('fontFamily.sans');
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-3);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-3);
+  }
+
+  *:focus-visible {
+    outline: 1.5px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+}
+
+@layer utilities {
+  .truncate-1 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: .5; transform: scale(.8); }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin-token {
+  to { transform: rotate(360deg); }
+}

@@ -20,10 +20,19 @@ const MoveInput = z.object({
   position: z.number().int().min(0),
 });
 
+function parseIdList(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function taskRoutes(app: FastifyInstance) {
   app.get("/projects/:projectId/tasks", async (req) => {
     const { projectId } = req.params as { projectId: string };
-    return db.task.findMany({
+    const tasks = await db.task.findMany({
       where: { projectId },
       include: {
         assignedAgent: true,
@@ -31,6 +40,13 @@ export async function taskRoutes(app: FastifyInstance) {
       },
       orderBy: [{ status: "asc" }, { position: "asc" }],
     });
+    // SQLite guarda estos campos como JSON string; el cliente espera arrays,
+    // igual que hace /skills con tags.
+    return tasks.map((task) => ({
+      ...task,
+      requiredSkillIds: parseIdList(task.requiredSkillIds),
+      dependsOn: parseIdList(task.dependsOn),
+    }));
   });
 
   app.post("/tasks", async (req) => {

@@ -28,7 +28,13 @@ export async function setupWorkspace(
   }
 
   await fs.mkdir(workspacePath, { recursive: true });
-  await copyDirShallow(project.repoPath, workspacePath);
+  // El root de workspaces suele vivir dentro del propio repo (WORKSPACES_ROOT
+  // por defecto es ./workspaces). Sin excluirlo, la copia se copiaría dentro de
+  // sí misma sin fin.
+  await copyDirShallow(project.repoPath, workspacePath, [
+    baseWorkspacesRoot,
+    workspacePath,
+  ]);
   return { workspacePath, branchName: null };
 }
 
@@ -106,16 +112,36 @@ export async function cleanupWorkspace(
   }
 }
 
-async function copyDirShallow(src: string, dest: string): Promise<void> {
-  const EXCLUDED = new Set(["node_modules", ".git", ".next", "dist", "build"]);
+const EXCLUDED_NAMES = new Set(["node_modules", ".git", ".next", "dist", "build"]);
+
+/** Windows compara rutas sin distinguir mayúsculas. */
+function normalizePath(p: string): string {
+  const resolved = path.resolve(p);
+  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+}
+
+/** true si `candidate` es `ancestor` o está contenido en él. */
+function containsPath(ancestor: string, candidate: string): boolean {
+  const rel = path.relative(normalizePath(ancestor), normalizePath(candidate));
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+}
+
+async function copyDirShallow(
+  src: string,
+  dest: string,
+  skip: string[] = [],
+): Promise<void> {
   await fs.mkdir(dest, { recursive: true });
   const entries = await fs.readdir(src, { withFileTypes: true });
   for (const entry of entries) {
-    if (EXCLUDED.has(entry.name)) continue;
+    if (EXCLUDED_NAMES.has(entry.name)) continue;
     const srcPath = path.join(src, entry.name);
+    // Saltamos cualquier directorio que contenga (o sea) un destino de copia:
+    // entrar ahí sería recursión infinita.
+    if (skip.some((target) => containsPath(srcPath, target))) continue;
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {
-      await copyDirShallow(srcPath, destPath);
+      await copyDirShallow(srcPath, destPath, skip);
     } else if (entry.isFile()) {
       await fs.copyFile(srcPath, destPath);
     }

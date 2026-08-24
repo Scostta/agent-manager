@@ -15,9 +15,22 @@ const ProjectInput = z.object({
 
 export async function projectRoutes(app: FastifyInstance) {
   app.get("/projects", async () => {
-    return db.project.findMany({
-      include: { _count: { select: { tasks: true } } },
-      orderBy: { updatedAt: "desc" },
+    const [projects, grouped] = await Promise.all([
+      db.project.findMany({
+        include: { _count: { select: { tasks: true } } },
+        orderBy: { updatedAt: "desc" },
+      }),
+      // La grid de proyectos pinta el desglose por columna del kanban. Sin esto
+      // el frontend tendría que pedir las tasks de cada proyecto por separado.
+      db.task.groupBy({ by: ["projectId", "status"], _count: { _all: true } }),
+    ]);
+
+    return projects.map((project) => {
+      const taskCounts: Record<string, number> = {};
+      for (const row of grouped) {
+        if (row.projectId === project.id) taskCounts[row.status] = row._count._all;
+      }
+      return { ...project, taskCounts };
     });
   });
 
