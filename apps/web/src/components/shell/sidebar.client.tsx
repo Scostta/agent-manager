@@ -2,18 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Icon, type IconName } from "@/components/ui/icon";
-import { StatusDot, cn } from "@/components/ui/primitives";
+
+import { Icon } from "@/components/ui/icon";
+import { StatusDot, cn } from "@/components/ui/primitives.client";
 import { useProjects, useQueueStats } from "@/lib/hooks";
 
-const NAV: { href: string; icon: IconName; label: string; enabled: boolean }[] = [
-  { href: "/projects", icon: "folder", label: "Projects", enabled: true },
-  { href: "/agents", icon: "bot", label: "Agents", enabled: false },
-  { href: "/skills", icon: "layers", label: "Skills", enabled: false },
-  { href: "/claude-md", icon: "file", label: "CLAUDE.md", enabled: false },
-];
+import type { ReactElement } from "react";
+import type { IconName } from "@/components/ui/icon";
 
-export function Sidebar() {
+const NAV = [
+  { href: "/projects", icon: "folder", label: "Projects" },
+  { href: "/agents", icon: "bot", label: "Agents" },
+  { href: "/skills", icon: "layers", label: "Skills" },
+  { href: "/claude-md", icon: "file", label: "CLAUDE.md" },
+] as const satisfies readonly { href: string; icon: IconName; label: string }[];
+
+export function Sidebar(): ReactElement {
   const pathname = usePathname();
   const { data: projects } = useProjects();
   const { data: queue } = useQueueStats();
@@ -32,18 +36,6 @@ export function Sidebar() {
       <nav className="flex flex-1 flex-col gap-px overflow-y-auto p-1.5">
         {NAV.map((item) => {
           const active = pathname.startsWith(item.href);
-          if (!item.enabled) {
-            return (
-              <span
-                key={item.href}
-                title="Pendiente de construir"
-                className="flex cursor-not-allowed items-center gap-2.5 rounded-md px-2.5 py-1.5 text-base text-txt-3 opacity-50"
-              >
-                <Icon name={item.icon} size={14} />
-                {item.label}
-              </span>
-            );
-          }
           return (
             <Link
               key={item.href}

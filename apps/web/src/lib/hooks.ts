@@ -1,23 +1,34 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import {
+  getAgent,
   getQueueStats,
+  getRun,
   listAgents,
+  listClaudeMd,
   listProjects,
   listSkills,
   listTasks,
   sseUrl,
-} from "./api";
-import { isActiveRun, type BoardEvent } from "./types";
+} from "@/lib/api";
+import {
+  isActiveRun,
+  type BoardEvent,
+  type RunEvent,
+  type RunStatus,
+} from "@/lib/types";
 
 export const keys = {
   projects: "/projects",
   agents: "/agents",
   skills: "/skills",
   queue: "/queue/stats",
+  claudeMd: "/claude-md",
   tasks: (projectId: string) => `/projects/${projectId}/tasks`,
+  agent: (id: string) => `/agents/${id}`,
+  run: (id: string) => `/runs/${id}`,
 };
 
 export function useProjects() {
@@ -30,6 +41,18 @@ export function useAgents() {
 
 export function useSkills() {
   return useSWR(keys.skills, listSkills);
+}
+
+export function useAgent(id: string | null) {
+  return useSWR(id ? keys.agent(id) : null, () => getAgent(id!));
+}
+
+export function useClaudeMdDocs() {
+  return useSWR(keys.claudeMd, listClaudeMd);
+}
+
+export function useRun(id: string | null) {
+  return useSWR(id ? keys.run(id) : null, () => getRun(id!));
 }
 
 export function useTasks(projectId: string | null) {
@@ -76,4 +99,76 @@ export function useBoardStream(projectId: string | null) {
 
     return () => source.close();
   }, [projectId, mutate]);
+}
+
+export type RunTokens = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  costUsd: number;
+};
+
+/** Un run largo puede escupir decenas de miles de líneas; conservamos solo la
+ *  cola, que es lo único que el visor muestra. */
+const MAX_LOG_LINES = 2000;
+
+/**
+ * Escucha /runs/:id/stream. Devuelve el log acumulado, el último recuento de
+ * tokens y el estado final si llega. Pasar `null` cierra el stream (útil para
+ * no abrir conexión en runs ya terminadas).
+ */
+export function useRunStream(runId: string | null) {
+  const [lines, setLines] = useState<string[]>([]);
+  const [tokens, setTokens] = useState<RunTokens | null>(null);
+  const [status, setStatus] = useState<RunStatus | null>(null);
+
+  useEffect(() => {
+    setLines([]);
+    setTokens(null);
+    setStatus(null);
+    if (!runId) return;
+
+    const source = new EventSource(sseUrl(`/runs/${runId}/stream`));
+
+    source.onmessage = (event) => {
+      let parsed: RunEvent;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      switch (parsed.type) {
+        case "log":
+          setLines((current) =>
+            current.length >= MAX_LOG_LINES
+              ? [...current.slice(1 - MAX_LOG_LINES), parsed.line]
+              : [...current, parsed.line],
+          );
+          break;
+        case "tokens":
+          setTokens({
+            input: parsed.input,
+            output: parsed.output,
+            cacheRead: parsed.cacheRead,
+            cacheWrite: parsed.cacheWrite,
+            costUsd: parsed.costUsd,
+          });
+          break;
+        case "status":
+          setStatus(parsed.status);
+          break;
+        default:
+          // `stream` trae el evento crudo de stream-json; el visor usa `log`.
+          break;
+      }
+    };
+
+    source.onerror = () => {};
+
+    return () => source.close();
+  }, [runId]);
+
+  return { lines, tokens, status };
 }

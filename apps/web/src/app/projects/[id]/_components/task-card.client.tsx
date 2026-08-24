@@ -2,11 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { Icon } from "@/components/ui/icon";
-import { AgentAvatar, Chip, StatusDot, cn } from "@/components/ui/primitives";
-import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
-import { isActiveRun, latestRun, type Skill, type Task } from "@/lib/types";
+
 import { PRIORITY_DOT } from "./columns";
+import { Icon } from "@/components/ui/icon";
+import { AgentAvatar, Chip, StatusDot, cn } from "@/components/ui/primitives.client";
+import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
+import { isActiveRun, latestRun } from "@/lib/types";
+
+import type { ReactElement } from "react";
+import type { Skill, Task } from "@/lib/types";
 
 export function TaskCardBody({
   task,
@@ -18,7 +22,7 @@ export function TaskCardBody({
   skills: Skill[];
   compact?: boolean;
   dragging?: boolean;
-}) {
+}): ReactElement {
   const run = latestRun(task);
   const active = isActiveRun(run);
   const [elapsed, setElapsed] = useState(0);
@@ -108,7 +112,7 @@ export function SortableTaskCard({
   skills: Skill[];
   compact?: boolean;
   onSelect: (task: Task) => void;
-}) {
+}): ReactElement {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id, data: { status: task.status } });
 

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+
+import { COLUMNS, PRIORITY_LABEL } from "./columns";
 import { Icon } from "@/components/ui/icon";
 import {
   AgentAvatar,
@@ -8,12 +11,15 @@ import {
   Button,
   Chip,
   Divider,
+  Select,
   StatusDot,
   cn,
-} from "@/components/ui/primitives";
+} from "@/components/ui/primitives.client";
 import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
-import { isActiveRun, latestRun, type Agent, type Skill, type Task } from "@/lib/types";
-import { COLUMNS, PRIORITY_LABEL } from "./columns";
+import { isActiveRun, latestRun } from "@/lib/types";
+
+import type { ReactElement } from "react";
+import type { Agent, Skill, Task } from "@/lib/types";
 
 const STATUS_BADGE = {
   todo: "default",
@@ -23,7 +29,7 @@ const STATUS_BADGE = {
   blocked: "red",
 } as const;
 
-function RunMetrics({ label, value }: { label: string; value: string }) {
+function RunMetrics({ label, value }: { label: string; value: string }): ReactElement {
   return (
     <div>
       <div className="text-2xs text-txt-3">{label}</div>
@@ -54,7 +60,7 @@ export function TaskDrawer({
   onMove: (status: Task["status"]) => void;
   onAssign: (agentId: string | null) => void;
   onDelete: () => void;
-}) {
+}): ReactElement {
   const run = latestRun(task);
   const active = isActiveRun(run);
   const taskSkills = skills.filter((s) => task.requiredSkillIds.includes(s.id));
@@ -98,14 +104,14 @@ export function TaskDrawer({
 
         <Divider label="Agente" />
         <div className="my-3 flex flex-col gap-2">
-          <select
+          <Select
             value={agentId}
+            inputSize="md"
             onChange={(e) => {
               const next = e.target.value;
               setAgentId(next);
               onAssign(next || null);
             }}
-            className="h-[34px] w-full rounded-md border border-border-2 bg-bg-3 px-2.5 text-base text-txt-1 outline-none focus:border-accent"
           >
             <option value="">Sin agente asignado</option>
             {agents.map((agent) => (
@@ -113,7 +119,7 @@ export function TaskDrawer({
                 {agent.name} · {agent.model}
               </option>
             ))}
-          </select>
+          </Select>
           {selectedAgent && (
             <div className="flex items-center gap-2.5 rounded-md border border-border-1 bg-bg-3 px-2.5 py-2">
               <AgentAvatar name={selectedAgent.name} size={28} />
@@ -143,7 +149,20 @@ export function TaskDrawer({
           </>
         )}
 
-        <Divider label="Última run" />
+        <div className="flex items-center gap-2">
+          <div className="flex-1">
+            <Divider label="Última run" />
+          </div>
+          {run && (
+            <Link
+              href={`/runs/${run.id}`}
+              className="flex shrink-0 items-center gap-1 text-2xs font-medium text-accent hover:underline"
+            >
+              Ver log
+              <Icon name="chevronRight" size={9} />
+            </Link>
+          )}
+        </div>
         <div className="mt-3">
           {!run && <div className="py-2 text-sm text-txt-3">Todavía no se ha ejecutado</div>}
 

@@ -11,17 +11,17 @@ import {
   useDroppable,
   useSensor,
   useSensors,
-  type CollisionDetection,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
 } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { useSWRConfig } from "swr";
 
+import { COLUMNS, COLUMN_LABEL } from "./columns";
+import { NewTaskModal } from "./new-task-modal.client";
+import { SortableTaskCard, TaskCardBody } from "./task-card.client";
+import { TaskDrawer } from "./task-drawer.client";
 import { Icon } from "@/components/ui/icon";
-import { Button, EmptyState, Kbd, StatusDot, cn } from "@/components/ui/primitives";
-import { useToast } from "@/components/ui/toast";
+import { Button, EmptyState, Kbd, StatusDot, cn } from "@/components/ui/primitives.client";
+import { useToast } from "@/components/ui/toast.client";
 import {
   cancelRun as apiCancelRun,
   deleteTask,
@@ -30,11 +30,15 @@ import {
   updateTask,
 } from "@/lib/api";
 import { keys, useAgents, useBoardStream, useSkills, useTasks } from "@/lib/hooks";
+
+import type { ReactElement } from "react";
+import type {
+  CollisionDetection,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
+} from "@dnd-kit/core";
 import type { Project, Task, TaskStatus } from "@/lib/types";
-import { COLUMNS, COLUMN_LABEL } from "./columns";
-import { SortableTaskCard, TaskCardBody } from "./task-card";
-import { TaskDrawer } from "./task-drawer";
-import { NewTaskModal } from "./new-task-modal";
 
 /**
  * closestCorners resuelve la columna por el rectángulo de la tarjeta, no por el
@@ -65,7 +69,7 @@ function Column({
   compact: boolean;
   onSelect: (task: Task) => void;
   onAdd: (status: TaskStatus) => void;
-}) {
+}): ReactElement {
   const { setNodeRef, isOver } = useDroppable({ id: `column:${status}` });
 
   return (
@@ -116,7 +120,7 @@ function Column({
   );
 }
 
-export function KanbanView({ project }: { project: Project }) {
+export function KanbanView({ project }: { project: Project }): ReactElement {
   const toast = useToast();
   const { mutate } = useSWRConfig();
   const { data: tasks, error, isLoading } = useTasks(project.id);

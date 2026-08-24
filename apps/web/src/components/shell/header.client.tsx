@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+
 import { Icon } from "@/components/ui/icon";
-import { Kbd, StatusDot } from "@/components/ui/primitives";
+import { Kbd, StatusDot } from "@/components/ui/primitives.client";
 import { useQueueStats } from "@/lib/hooks";
+
+import type { ReactElement } from "react";
 
 export type Crumb = { label: string; href?: string };
 
@@ -13,7 +16,7 @@ export function Header({
 }: {
   crumbs: Crumb[];
   onOpenPalette: () => void;
-}) {
+}): ReactElement {
   const { data: queue } = useQueueStats();
   const running = queue?.pending ?? 0;
   const waiting = queue?.waiting ?? 0;

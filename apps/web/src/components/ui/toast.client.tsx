@@ -7,9 +7,11 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
-import { Icon } from "./icon";
+
+import { Icon } from "@/components/ui/icon";
+
+import type { ReactElement, ReactNode } from "react";
 
 type ToastType = "default" | "success" | "error" | "warn";
 type ToastItem = { id: number; message: string; type: ToastType };
@@ -27,7 +29,7 @@ const DOT_COLOR: Record<ToastType, string> = {
   warn: "bg-warn",
 };
 
-function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }): ReactElement {
   useEffect(() => {
     const timer = setTimeout(onDismiss, item.type === "error" ? 6000 : 3500);
     return () => clearTimeout(timer);
@@ -51,7 +53,7 @@ function Toast({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) 
 
 let nextId = 0;
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children }: { children: ReactNode }): ReactElement {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const push = useCallback((message: string, type: ToastType = "default") => {

@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Icon, type IconName } from "@/components/ui/icon";
-import { Badge, Kbd, cn } from "@/components/ui/primitives";
-import { useProjects } from "@/lib/hooks";
+
+import { Icon } from "@/components/ui/icon";
+import { Badge, Kbd, cn } from "@/components/ui/primitives.client";
 import { shortenPath } from "@/lib/format";
+import { useProjects } from "@/lib/hooks";
+
+import type { ReactElement } from "react";
+import type { IconName } from "@/components/ui/icon";
 
 type Entry = {
   kind: "project" | "action";
@@ -20,7 +24,7 @@ const KIND_COLOR: Record<Entry["kind"], string> = {
   action: "text-txt-3",
 };
 
-export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }): ReactElement | null {
   const router = useRouter();
   const { data: projects } = useProjects();
   const [query, setQuery] = useState("");

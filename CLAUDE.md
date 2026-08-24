@@ -71,10 +71,27 @@ apps/
 
   web/                          # Frontend Next.js
     src/
-      app/                       # pages
+      app/
+        <ruta>/
+          page.tsx               # server component delgado: metadata + monta la vista
+          _components/           # componentes de ESA ruta, colocados aquí
       components/
-      lib/api.ts                 # cliente HTTP + helper SSE
+        shell/                   # app-shell, sidebar, header, command palette
+        ui/                      # primitivos compartidos (Icon, Modal, Toast, …)
+      lib/
+        api.ts                   # cliente HTTP + helper SSE
+        hooks.ts                 # hooks SWR + streams SSE
+        types.ts                 # espejo de los modelos de la API
+        format.ts
 ```
+
+**Convenciones del frontend:**
+- Un componente usado por una sola ruta vive en el `_components/` de esa ruta. Solo sube a `src/components/` cuando lo comparten varias.
+- Client components con sufijo `.client.tsx`; `"use client"` solo cuando hace falta.
+- `export default` únicamente en `page.tsx` y `layout.tsx`; el resto, named exports.
+- Props tipadas inline y retorno `: ReactElement`.
+- `import type` agrupado al final del bloque de imports. Alias `@/` para lo compartido, relativo para hermanos dentro de `_components/`.
+- `as const` en objetos de constantes.
 
 ## Conceptos del dominio
 

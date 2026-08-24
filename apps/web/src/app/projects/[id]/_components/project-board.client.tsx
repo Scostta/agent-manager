@@ -1,13 +1,16 @@
 "use client";
 
 import useSWR from "swr";
-import { AppShell } from "@/components/shell/app-shell";
-import { KanbanView } from "@/components/kanban/kanban-view";
+
+import { KanbanView } from "./kanban-view.client";
+import { AppShell } from "@/components/shell/app-shell.client";
 import { Icon } from "@/components/ui/icon";
-import { EmptyState } from "@/components/ui/primitives";
+import { EmptyState } from "@/components/ui/primitives.client";
 import { getProject } from "@/lib/api";
 
-export function ProjectBoard({ projectId }: { projectId: string }) {
+import type { ReactElement } from "react";
+
+export function ProjectBoard({ projectId }: { projectId: string }): ReactElement {
   const { data: project, error, isLoading } = useSWR(`/projects/${projectId}`, () =>
     getProject(projectId),
   );

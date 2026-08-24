@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
-import { Icon } from "./icon";
+import { useEffect } from "react";
+
+import { Icon } from "@/components/ui/icon";
+
+import type { ReactElement, ReactNode } from "react";
 
 export function Modal({
   open,
@@ -17,7 +20,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   width?: number;
-}) {
+}): ReactElement | null {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {

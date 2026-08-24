@@ -1,11 +1,15 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { Sidebar } from "./sidebar";
-import { Header, type Crumb } from "./header";
-import { CommandPalette } from "./command-palette";
+import { useEffect, useState } from "react";
 
-export function AppShell({ crumbs, children }: { crumbs: Crumb[]; children: ReactNode }) {
+import { CommandPalette } from "@/components/shell/command-palette.client";
+import { Header } from "@/components/shell/header.client";
+import { Sidebar } from "@/components/shell/sidebar.client";
+
+import type { ReactElement, ReactNode } from "react";
+import type { Crumb } from "@/components/shell/header.client";
+
+export function AppShell({ crumbs, children }: { crumbs: Crumb[]; children: ReactNode }): ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {

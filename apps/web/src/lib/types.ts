@@ -102,3 +102,47 @@ export function isActiveRun(run: TaskRun | undefined): boolean {
 export function latestRun(task: Task): TaskRun | undefined {
   return task.runs?.[0];
 }
+
+export type ClaudeMdScope = "global" | "project" | "agent";
+
+export type ClaudeMd = {
+  id: string;
+  scope: ClaudeMdScope;
+  content: string;
+  filePath: string | null;
+  updatedAt: string;
+  /** GET /claude-md incluye el proyecto; GET /claude-md/:id no. */
+  project?: Project | null;
+};
+
+/** GET /runs/:id incluye task y agente; la lista del board no. */
+export type RunWithContext = TaskRun & { task: Task; agent: Agent };
+
+/** Eventos de /runs/:id/stream. Espejo de `RunEvent` en apps/api/src/bus.ts. */
+export type RunEvent =
+  | { type: "stream"; data: unknown }
+  | {
+      type: "tokens";
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+      costUsd: number;
+    }
+  | { type: "status"; status: Exclude<RunStatus, "queued"> }
+  | { type: "log"; line: string };
+
+export type RunDiff = { branchName: string; diff: string };
+
+export type SkillContent = { content: string; filePath: string };
+
+/** Modelos con tarifa conocida en apps/api/src/runner/pricing.ts. Uno fuera de
+ *  esta lista funciona, pero el coste se estima con la tarifa más cara. */
+export const MODELS = [
+  "claude-opus-5",
+  "claude-sonnet-5",
+  "claude-haiku-4-5",
+  "claude-fable-5",
+  "claude-opus-4-8",
+  "claude-sonnet-4-6",
+] as const;

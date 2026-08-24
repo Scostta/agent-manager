@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Modal } from "@/components/ui/modal";
-import { Button, Input, Textarea } from "@/components/ui/primitives";
-import { useToast } from "@/components/ui/toast";
-import { createTask, moveTask } from "@/lib/api";
-import { PRIORITY_MEDIUM, type Agent, type TaskStatus } from "@/lib/types";
+
 import { COLUMN_LABEL, PRIORITY_LABEL } from "./columns";
+import { Modal } from "@/components/ui/modal.client";
+import { Button, Input, Textarea } from "@/components/ui/primitives.client";
+import { useToast } from "@/components/ui/toast.client";
+import { createTask, moveTask } from "@/lib/api";
+import { PRIORITY_MEDIUM } from "@/lib/types";
+
+import type { ReactElement } from "react";
+import type { Agent, TaskStatus } from "@/lib/types";
 
 export function NewTaskModal({
   projectId,
@@ -20,7 +24,7 @@ export function NewTaskModal({
   agents: Agent[];
   onClose: () => void;
   onCreated: () => void;
-}) {
+}): ReactElement {
   const toast = useToast();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");

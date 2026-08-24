@@ -1,13 +1,18 @@
 "use client";
 
+import { forwardRef } from "react";
+
+import { Icon } from "@/components/ui/icon";
+
 import type {
   ButtonHTMLAttributes,
   InputHTMLAttributes,
+  ReactElement,
   ReactNode,
+  SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { forwardRef } from "react";
-import { Icon, type IconName } from "./icon";
+import type { IconName } from "@/components/ui/icon";
 
 export function cn(...parts: (string | false | null | undefined)[]): string {
   return parts.filter(Boolean).join(" ");
@@ -40,7 +45,7 @@ const BADGE_SIZES = {
   xs: "px-[5px] text-2xs h-4 rounded-[3px]",
   sm: "px-1.5 text-xs h-[18px] rounded-sm",
   md: "px-2 text-sm h-[22px] rounded-sm",
-};
+} as const;
 
 export function Badge({
   children,
@@ -52,7 +57,7 @@ export function Badge({
   variant?: BadgeVariant;
   size?: keyof typeof BADGE_SIZES;
   dot?: boolean;
-}) {
+}): ReactElement {
   return (
     <span
       className={cn(
@@ -81,7 +86,7 @@ export function Chip({
   onClick?: () => void;
   removable?: boolean;
   onRemove?: () => void;
-}) {
+}): ReactElement {
   const Tag = onClick ? "button" : "span";
   return (
     <Tag
@@ -137,7 +142,7 @@ const BUTTON_SIZES = {
   sm: "h-7 px-2.5 text-sm rounded-md gap-1.5",
   md: "h-[34px] px-3.5 text-base rounded-md gap-2",
   lg: "h-10 px-[18px] text-md rounded-lg gap-2",
-};
+} as const;
 
 const ICON_SIZE = { xs: 11, sm: 12, md: 14, lg: 15 } as const;
 
@@ -187,7 +192,7 @@ export const AGENT_COLORS = [
   "#4A9EE8",
   "#D9784A",
   "#B06CB0",
-];
+] as const;
 
 /** Color estable derivado del nombre: la API no guarda color por agente. */
 export function agentColor(name: string): string {
@@ -195,7 +200,7 @@ export function agentColor(name: string): string {
   return AGENT_COLORS[Math.abs(sum) % AGENT_COLORS.length];
 }
 
-export function AgentAvatar({ name, size = 24 }: { name: string; size?: number }) {
+export function AgentAvatar({ name, size = 24 }: { name: string; size?: number }): ReactElement {
   const color = agentColor(name || "??");
   return (
     <span
@@ -231,7 +236,7 @@ export function StatusDot({
 }: {
   status?: keyof typeof DOT_COLORS;
   pulse?: boolean;
-}) {
+}): ReactElement {
   const color = DOT_COLORS[status] ?? DOT_COLORS.idle;
   return (
     <span className="relative inline-flex h-2 w-2 shrink-0 items-center justify-center">
@@ -248,7 +253,7 @@ export function StatusDot({
 
 /* ── Kbd ──────────────────────────────────────────────────────────────────── */
 
-export function Kbd({ children }: { children: ReactNode }) {
+export function Kbd({ children }: { children: ReactNode }): ReactElement {
   return (
     <kbd className="inline-flex items-center justify-center rounded-sm border border-b-2 border-border-3 bg-bg-4 px-[5px] text-2xs leading-relaxed text-txt-3">
       {children}
@@ -262,7 +267,7 @@ const INPUT_SIZES = {
   sm: "h-7 text-sm",
   md: "h-[34px] text-base",
   lg: "h-10 text-md",
-};
+} as const;
 
 export const Input = forwardRef<
   HTMLInputElement,
@@ -295,6 +300,29 @@ export const Input = forwardRef<
   );
 });
 
+export function Select({
+  className,
+  inputSize = "sm",
+  children,
+  ...rest
+}: Omit<SelectHTMLAttributes<HTMLSelectElement>, "size"> & {
+  inputSize?: keyof typeof INPUT_SIZES;
+}): ReactElement {
+  return (
+    <select
+      className={cn(
+        "w-full cursor-pointer appearance-none rounded-md border border-border-2 bg-bg-3 px-2.5 text-txt-1 outline-none transition-colors",
+        "focus:border-accent",
+        INPUT_SIZES[inputSize],
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </select>
+  );
+}
+
 export function Textarea({
   className,
   mono,
@@ -315,7 +343,7 @@ export function Textarea({
 
 /* ── Divider ──────────────────────────────────────────────────────────────── */
 
-export function Divider({ label }: { label?: string }) {
+export function Divider({ label }: { label?: string }): ReactElement {
   if (!label) return <div className="h-px bg-border-1" />;
   return (
     <div className="flex items-center gap-2">
@@ -336,7 +364,7 @@ export function Spinner({
 }: {
   size?: number;
   color?: string;
-}) {
+}): ReactElement {
   return (
     <span
       className="inline-block shrink-0 animate-spin-token rounded-full"
@@ -363,7 +391,7 @@ export function EmptyState({
   title: string;
   hint?: string;
   action?: ReactNode;
-}) {
+}): ReactElement {
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
       <span className="flex h-11 w-11 items-center justify-center rounded-lg border border-border-2 bg-bg-3 text-txt-3">

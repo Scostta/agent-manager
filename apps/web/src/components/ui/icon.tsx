@@ -142,7 +142,7 @@ export function Icon({
   size?: number;
   className?: string;
   style?: CSSProperties;
-}) {
+}): ReactElement | null {
   const path = PATHS[name];
   if (!path) return null;
   return (

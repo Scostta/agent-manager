@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSWRConfig } from "swr";
+
 import { Icon } from "@/components/ui/icon";
+import { Modal } from "@/components/ui/modal.client";
 import {
   Badge,
   Button,
@@ -11,12 +13,13 @@ import {
   Input,
   StatusDot,
   Textarea,
-} from "@/components/ui/primitives";
-import { Modal } from "@/components/ui/modal";
-import { useToast } from "@/components/ui/toast";
+} from "@/components/ui/primitives.client";
+import { useToast } from "@/components/ui/toast.client";
 import { createProject } from "@/lib/api";
-import { keys, useProjects } from "@/lib/hooks";
 import { formatRelative } from "@/lib/format";
+import { keys, useProjects } from "@/lib/hooks";
+
+import type { ReactElement } from "react";
 import type { Project, TaskStatus } from "@/lib/types";
 
 const COUNT_BADGES: { status: TaskStatus; label: string; variant: "default" | "blue" | "yellow" | "green" | "red"; dot?: boolean }[] = [
@@ -27,7 +30,7 @@ const COUNT_BADGES: { status: TaskStatus; label: string; variant: "default" | "b
   { status: "blocked", label: "bloqueadas", variant: "red", dot: true },
 ];
 
-function ProjectCard({ project }: { project: Project }) {
+function ProjectCard({ project }: { project: Project }): ReactElement {
   const counts = project.taskCounts ?? {};
   const running = counts.in_progress ?? 0;
 
@@ -92,7 +95,7 @@ function ProjectCard({ project }: { project: Project }) {
   );
 }
 
-function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }): ReactElement {
   const toast = useToast();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState("");
@@ -194,7 +197,7 @@ function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void
   );
 }
 
-export function ProjectsView() {
+export function ProjectsView(): ReactElement {
   const { data: projects, error, isLoading } = useProjects();
   const [showNew, setShowNew] = useState(false);
 
