@@ -2,29 +2,36 @@
 
 ## Estado actual
 
-Backend completo con estrategia híbrida worktree/copy y compatibilidad Windows. Frontend es un placeholder.
+Backend completo con estrategia híbrida worktree/copy y compatibilidad Windows.
+Frontend con todas las pantallas del MVP y el dashboard de consumo.
 
-## Fase 1 — Frontend MVP
+**Pendiente de validar en real:** todavía no se ha ejecutado una run de verdad
+(spawn del CLI → stream-json → SSE → UI). Es lo siguiente que hay que probar.
 
-Por orden:
-1. **Layout base con sidebar** (Projects, Agents, Skills, CLAUDE.md, Ajustes) + header con `/queue/stats`.
-2. **Lista de Projects** + modal para crear (detecta estrategia automáticamente).
-3. **Kanban del proyecto** con `@dnd-kit/core`, drawer de detalle de task, botón Run.
-4. **Run Console** con SSE en vivo, tokens/coste actualizándose, botón Cancel.
-5. **Agentes**: CRUD + skill picker.
-6. **Skills**: catálogo con búsqueda y preview del SKILL.md.
-7. **CLAUDE.md**: editor Monaco con split preview.
+## Fase 1 — Frontend MVP ✅
 
-## Fase 2 — Review PR-style
+1. ✅ **Layout base con sidebar** + header con `/queue/stats`.
+2. ✅ **Lista de Projects** + modal para crear (detecta estrategia automáticamente).
+3. ✅ **Kanban del proyecto** con `@dnd-kit/core`, drawer de detalle, botón Run.
+4. ✅ **Run Console** con SSE en vivo, tokens/coste actualizándose, botón Cancel.
+5. ✅ **Agentes**: CRUD + skill picker.
+6. ✅ **Skills**: catálogo con búsqueda y preview del SKILL.md.
+7. ✅ **CLAUDE.md**: editor Monaco.
+
+## Fase 2 — Review PR-style (a medias)
 
 Aprovechar los worktrees:
-- Botón "Ver diff" en cada run que usa `GET /runs/:id/diff`.
-- Botón "Mergear a main" ejecutando `git merge --no-ff` en el repo.
-- Botón "Descartar" (borra worktree y rama).
+- ✅ Pestaña "Diff" en el visor de run, contra `GET /runs/:id/diff`.
+- ⬜ Botón "Mergear a main" ejecutando `git merge --no-ff` en el repo.
+- ⬜ Botón "Descartar" (borra worktree y rama).
 
-## Fase 3 — Dashboard de tokens/costes
+## Fase 3 — Dashboard de tokens/costes ✅
 
-Recharts + endpoint de agregados por agente/proyecto/día.
+- `GET /stats/summary?days=N` agrega por día, agente, proyecto y modelo.
+- `/dashboard`: tiles de totales, tokens por día apilados por tipo, coste por
+  día y cortes por agente/proyecto/modelo. Recharts.
+- `GET /projects/:id/tasks` devuelve `totals` por task (suma de todas sus runs),
+  que es lo que pintan la tarjeta del kanban y el drawer.
 
 ## Fase 4 — Refinamientos
 

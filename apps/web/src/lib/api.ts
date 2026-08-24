@@ -8,6 +8,7 @@ import type {
   RunWithContext,
   Skill,
   SkillContent,
+  StatsSummary,
   Task,
   TaskStatus,
 } from "@/lib/types";
@@ -170,6 +171,10 @@ export const cancelRun = (runId: string) =>
 
 /** Solo existe si el proyecto usa estrategia worktree; con "copy" da 400. */
 export const getRunDiff = (runId: string) => api<RunDiff>(`/runs/${runId}/diff`);
+
+/* ── Stats ──────────────────────────────────────────── */
+
+export const getStats = (days: number) => api<StatsSummary>(`/stats/summary?days=${days}`);
 
 /* ── Queue ────────────────────────────────────────────────────────────────── */
 

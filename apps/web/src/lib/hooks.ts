@@ -6,6 +6,7 @@ import {
   getAgent,
   getQueueStats,
   getRun,
+  getStats,
   listAgents,
   listClaudeMd,
   listProjects,
@@ -29,6 +30,7 @@ export const keys = {
   tasks: (projectId: string) => `/projects/${projectId}/tasks`,
   agent: (id: string) => `/agents/${id}`,
   run: (id: string) => `/runs/${id}`,
+  stats: (days: number) => `/stats/summary?days=${days}`,
 };
 
 export function useProjects() {
@@ -53,6 +55,10 @@ export function useClaudeMdDocs() {
 
 export function useRun(id: string | null) {
   return useSWR(id ? keys.run(id) : null, () => getRun(id!));
+}
+
+export function useStats(days: number) {
+  return useSWR(keys.stats(days), () => getStats(days));
 }
 
 export function useTasks(projectId: string | null) {

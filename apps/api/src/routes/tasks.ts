@@ -32,21 +32,57 @@ function parseIdList(raw: string): string[] {
 export async function taskRoutes(app: FastifyInstance) {
   app.get("/projects/:projectId/tasks", async (req) => {
     const { projectId } = req.params as { projectId: string };
-    const tasks = await db.task.findMany({
-      where: { projectId },
-      include: {
-        assignedAgent: true,
-        runs: { orderBy: { startedAt: "desc" }, take: 1 },
-      },
-      orderBy: [{ status: "asc" }, { position: "asc" }],
-    });
+    const [tasks, totals] = await Promise.all([
+      db.task.findMany({
+        where: { projectId },
+        include: {
+          assignedAgent: true,
+          runs: { orderBy: { startedAt: "desc" }, take: 1 },
+        },
+        orderBy: [{ status: "asc" }, { position: "asc" }],
+      }),
+      // `runs` solo trae la última ejecución, así que el gasto real de una task
+      // con reintentos hay que sumarlo aparte.
+      db.taskRun.groupBy({
+        by: ["taskId"],
+        where: { task: { projectId } },
+        _sum: {
+          inputTokens: true,
+          outputTokens: true,
+          cacheReadTokens: true,
+          cacheWriteTokens: true,
+          costUsd: true,
+        },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const byTask = new Map(totals.map((row) => [row.taskId, row]));
+
     // SQLite guarda estos campos como JSON string; el cliente espera arrays,
     // igual que hace /skills con tags.
-    return tasks.map((task) => ({
-      ...task,
-      requiredSkillIds: parseIdList(task.requiredSkillIds),
-      dependsOn: parseIdList(task.dependsOn),
-    }));
+    return tasks.map((task) => {
+      const sums = byTask.get(task.id);
+      const inputTokens = sums?._sum.inputTokens ?? 0;
+      const outputTokens = sums?._sum.outputTokens ?? 0;
+      const cacheReadTokens = sums?._sum.cacheReadTokens ?? 0;
+      const cacheWriteTokens = sums?._sum.cacheWriteTokens ?? 0;
+
+      return {
+        ...task,
+        requiredSkillIds: parseIdList(task.requiredSkillIds),
+        dependsOn: parseIdList(task.dependsOn),
+        totals: {
+          inputTokens,
+          outputTokens,
+          cacheReadTokens,
+          cacheWriteTokens,
+          totalTokens: inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens,
+          costUsd: sums?._sum.costUsd ?? 0,
+          runs: sums?._count._all ?? 0,
+        },
+      };
+    });
   });
 
   app.post("/tasks", async (req) => {

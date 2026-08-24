@@ -98,6 +98,22 @@ export function TaskCardBody({
           </span>
         )}
       </div>
+
+      {/* Acumulado de TODAS las runs: con reintentos, el gasto real de la task
+          no es el de la última ejecución. */}
+      {!compact && !active && task.totals.runs > 0 && (
+        <div className="mt-2 flex items-center gap-2 border-t border-border-1 pt-1.5">
+          <span className="font-mono text-2xs text-txt-3">
+            {formatTokens(task.totals.totalTokens)} tok
+          </span>
+          <span className="font-mono text-2xs font-semibold text-txt-2">
+            {formatCost(task.totals.costUsd)}
+          </span>
+          {task.totals.runs > 1 && (
+            <span className="ml-auto text-2xs text-txt-3">{task.totals.runs} runs</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

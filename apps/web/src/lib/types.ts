@@ -60,6 +60,17 @@ export type TaskRun = {
   endedAt: string | null;
 };
 
+export type TokenTotals = {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** input + output + caché. Es el número que la UI enseña como "tokens". */
+  totalTokens: number;
+  costUsd: number;
+  runs: number;
+};
+
 export type Task = {
   id: string;
   projectId: string;
@@ -75,6 +86,8 @@ export type Task = {
   position: number;
   /** GET /projects/:id/tasks devuelve solo la run más reciente. */
   runs: TaskRun[];
+  /** Suma de TODAS las runs de la task, reintentos incluidos. */
+  totals: TokenTotals;
   createdAt: string;
   updatedAt: string;
 };
@@ -102,6 +115,21 @@ export function isActiveRun(run: TaskRun | undefined): boolean {
 export function latestRun(task: Task): TaskRun | undefined {
   return task.runs?.[0];
 }
+
+export type DailyPoint = TokenTotals & { date: string };
+
+/** Corte del consumo por agente, proyecto o modelo. */
+export type Breakdown = TokenTotals & { id: string; name: string; detail: string };
+
+export type StatsSummary = {
+  since: string;
+  days: number;
+  totals: TokenTotals & { succeeded: number; failed: number; cancelled: number };
+  daily: DailyPoint[];
+  byAgent: Breakdown[];
+  byProject: Breakdown[];
+  byModel: Breakdown[];
+};
 
 export type ClaudeMdScope = "global" | "project" | "agent";
 

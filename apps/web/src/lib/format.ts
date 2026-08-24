@@ -29,6 +29,27 @@ export function formatCost(usd: number): string {
   return `$${usd.toFixed(2)}`;
 }
 
+const MONTHS = [
+  "ene",
+  "feb",
+  "mar",
+  "abr",
+  "may",
+  "jun",
+  "jul",
+  "ago",
+  "sep",
+  "oct",
+  "nov",
+  "dic",
+] as const;
+
+/** "2026-08-24" → "24 ago". El backend ya manda el día en hora local. */
+export function formatDayShort(isoDay: string): string {
+  const [, month, day] = isoDay.split("-");
+  return `${Number(day)} ${MONTHS[Number(month) - 1] ?? ""}`.trim();
+}
+
 /** Acorta rutas largas por el centro: C:\…\proyectos\repo */
 export function shortenPath(path: string, maxLength = 48): string {
   if (path.length <= maxLength) return path;

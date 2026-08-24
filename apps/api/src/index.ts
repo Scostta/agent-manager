@@ -13,6 +13,7 @@ import { taskRoutes } from "./routes/tasks.js";
 import { claudeMdRoutes } from "./routes/claudeMd.js";
 import { sseRoutes } from "./routes/sse.js";
 import { queueRoutes } from "./routes/queue.js";
+import { statsRoutes } from "./routes/stats.js";
 
 const app = Fastify({ logger: { level: "info" } });
 
@@ -26,6 +27,7 @@ await app.register(taskRoutes);
 await app.register(claudeMdRoutes);
 await app.register(sseRoutes);
 await app.register(queueRoutes);
+await app.register(statsRoutes);
 
 app.get("/health", async () => ({ ok: true, time: new Date().toISOString() }));
 

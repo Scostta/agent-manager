@@ -15,6 +15,7 @@ const NAV = [
   { href: "/agents", icon: "bot", label: "Agents" },
   { href: "/skills", icon: "layers", label: "Skills" },
   { href: "/claude-md", icon: "file", label: "CLAUDE.md" },
+  { href: "/dashboard", icon: "dollar", label: "Consumo" },
 ] as const satisfies readonly { href: string; icon: IconName; label: string }[];
 
 export function Sidebar(): ReactElement {

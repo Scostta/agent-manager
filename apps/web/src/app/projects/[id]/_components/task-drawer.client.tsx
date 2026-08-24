@@ -149,6 +149,32 @@ export function TaskDrawer({
           </>
         )}
 
+        {task.totals.runs > 0 && (
+          <>
+            <Divider label="Gasto de la tarea" />
+            <div className="my-3 rounded-md border border-border-1 bg-bg-3 px-2.5 py-2">
+              <div className="flex gap-3">
+                <RunMetrics label="Tokens" value={formatTokens(task.totals.totalTokens)} />
+                <RunMetrics label="Coste" value={formatCost(task.totals.costUsd)} />
+                <RunMetrics
+                  label={task.totals.runs === 1 ? "Run" : "Runs"}
+                  value={String(task.totals.runs)}
+                />
+              </div>
+              <div className="mt-2 flex gap-3 border-t border-border-1 pt-2">
+                <RunMetrics label="In" value={formatTokens(task.totals.inputTokens)} />
+                <RunMetrics label="Out" value={formatTokens(task.totals.outputTokens)} />
+                <RunMetrics
+                  label="Caché"
+                  value={formatTokens(
+                    task.totals.cacheReadTokens + task.totals.cacheWriteTokens,
+                  )}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="flex items-center gap-2">
           <div className="flex-1">
             <Divider label="Última run" />
