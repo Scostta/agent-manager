@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.next/
+*.log
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Runtime
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal
+apps/api/workspaces/
+apps/api/logs/
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.tsbuildinfo

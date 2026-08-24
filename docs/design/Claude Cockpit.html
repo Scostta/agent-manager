@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Claude Cockpit</title>
+<link rel="stylesheet" href="cockpit.css" />
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Load order matters: data → components → screens → shell → app -->
+<script type="text/babel" src="cockpit-data.jsx"></script>
+<script type="text/babel" src="cockpit-components.jsx"></script>
+<script type="text/babel" src="cockpit-projects.jsx"></script>
+<script type="text/babel" src="cockpit-run.jsx"></script>
+<script type="text/babel" src="cockpit-kanban.jsx"></script>
+<script type="text/babel" src="cockpit-agents.jsx"></script>
+<script type="text/babel" src="cockpit-skills.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="cockpit-shell.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "startView": "kanban",
+  "accentColor": "#7B6CF6",
+  "fontScale": 1,
+  "compactMode": false,
+  "showRunConsole": false
+}/*EDITMODE-END*/;
+
+function App() {
+  const { useTweaks, TweaksPanel, TweakSection, TweakSelect, TweakColor, TweakSlider, TweakToggle } = window;
+  const [tweaks, setTweaks] = useTweaks(TWEAK_DEFAULTS);
+
+  // Apply accent color CSS var dynamically
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--accent', tweaks.accentColor);
+    // Derive dim from accent
+    document.documentElement.style.setProperty('--accent-dim', tweaks.accentColor + '22');
+  }, [tweaks.accentColor]);
+
+  React.useEffect(() => {
+    document.documentElement.style.fontSize = (tweaks.fontScale * 100) + '%';
+  }, [tweaks.fontScale]);
+
+  const viewOptions = [
+    { value: 'projects', label: 'Projects list' },
+    { value: 'kanban', label: 'Kanban board' },
+    { value: 'agents', label: 'Agent editor' },
+    { value: 'skills', label: 'Skills catalog' },
+    { value: 'claudemd', label: 'CLAUDE.md editor' },
+  ];
+
+  return (
+    <>
+      <AppShell initialView={tweaks.startView} />
+      <TweaksPanel tweaks={tweaks} setTweaks={setTweaks}>
+        <TweakSection label="Start screen">
+          <TweakSelect id="startView" label="Default view" value={tweaks.startView}
+            options={viewOptions.map(o => ({ value: o.value, label: o.label }))}
+            onChange={v => setTweaks({ startView: v })} />
+        </TweakSection>
+        <TweakSection label="Visual">
+          <TweakColor id="accentColor" label="Accent color" value={tweaks.accentColor} onChange={v => setTweaks({ accentColor: v })} />
+          <TweakSlider id="fontScale" label="Font scale" value={tweaks.fontScale} min={0.8} max={1.2} step={0.05} onChange={v => setTweaks({ fontScale: v })} />
+          <TweakToggle id="compactMode" label="Compact kanban" value={tweaks.compactMode} onChange={v => setTweaks({ compactMode: v })} />
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
