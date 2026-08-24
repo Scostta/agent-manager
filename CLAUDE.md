@@ -6,16 +6,18 @@ Instrucciones para Claude Code cuando trabajes en este repositorio.
 
 **Claude Cockpit** es un dashboard personal para orquestar agentes Claude Code CLI. Un solo usuario, máquina local. El usuario define proyectos, agentes (con su prompt, modelo, skills permitidas), y un kanban de tareas. Arrastrar una task al estado `in_progress` spawnea un proceso `claude` CLI que ejecuta esa tarea en un workspace aislado.
 
+**Referencias mentales:** Paperclip (paperclipai/paperclip) y AgentManager (simonstaton/AgentManager). No copiamos ninguno, tomamos ideas.
+
 ## Stack y decisiones no-negociables
 
 - **Monorepo con pnpm workspaces.** No añadas npm, yarn, lerna, nx, turbo. pnpm basta.
 - **Backend:** Fastify 5 + TypeScript + Prisma + SQLite. ESM puro (`"type": "module"`).
 - **Frontend:** Next.js 15 App Router + React 19 + Tailwind + shadcn/ui cuando necesitemos componentes complejos.
-- **Cola de tasks:** `p-queue` en memoria. **No introduzcas Redis ni BullMQ** sin permiso explícito del usuario.
-- **Runner:** spawn del binario `claude` CLI con `--output-format stream-json`. **No uses el SDK de Anthropic directamente.**
-- **Tiempo real:** Server-Sent Events (SSE). **No introduzcas WebSockets.**
+- **Cola de tasks:** `p-queue` en memoria. **No introduzcas Redis ni BullMQ** sin permiso explícito del usuario. El objetivo es correr con un `pnpm dev` y nada más.
+- **Runner:** spawn del binario `claude` CLI con `--output-format stream-json`. **No uses el SDK de Anthropic directamente.** Si necesitas capacidades que el CLI no tiene, comenta primero con el usuario.
+- **Tiempo real:** Server-Sent Events (SSE). **No introduzcas WebSockets** — añaden complejidad que no necesitamos.
 - **Validación:** Zod en todos los endpoints de API.
-- **Drag & drop:** `@dnd-kit/core`.
+- **Drag & drop:** `@dnd-kit/core`. **No uses react-beautiful-dnd** (está archivado).
 - **Editor:** Monaco Editor para CLAUDE.md.
 - **Workspaces:** estrategia híbrida `worktree` / `copy` según si el `repoPath` del proyecto es un repo Git o no.
 
@@ -30,43 +32,48 @@ pnpm db:migrate       # aplicar migraciones Prisma
 pnpm db:studio        # abrir Prisma Studio
 pnpm db:seed          # datos de ejemplo
 pnpm typecheck        # typecheck de todo el monorepo
+pnpm build            # build de producción
 ```
 
 ## Estructura del repo
 
 ```
 apps/
-  api/
+  api/                         # Backend Fastify
     prisma/
-      schema.prisma
+      schema.prisma             # MODELO DE DATOS — mira aquí antes de tocar BD
       seed.ts
     src/
-      config.ts
-      db.ts
-      bus.ts
+      config.ts                 # todas las env vars pasan por aquí
+      db.ts                     # singleton de PrismaClient
+      bus.ts                    # EventEmitter interno; runner → SSE
       lib/
-        git.ts               # helpers de git (worktree, diff, etc)
-        process.ts           # kill multiplataforma (taskkill / signals)
-        paths.ts             # normalización POSIX de paths
+        git.ts                   # helpers de git (worktree, diff, etc)
+        process.ts               # kill multiplataforma (taskkill / signals)
+        paths.ts                 # normalización POSIX de paths
       runner/
-        workspace.ts         # setup híbrido worktree/copy
-        executor.ts          # spawn de claude CLI, parser stream-json
-        queue.ts             # p-queue global
-        pricing.ts
-        reaper.ts            # limpia runs huérfanas al arrancar
+        workspace.ts             # setup híbrido worktree/copy
+        executor.ts              # spawn de claude CLI, parser stream-json
+        queue.ts                 # p-queue global
+        pricing.ts               # $ por millón de tokens por modelo
+        reaper.ts                # limpia runs huérfanas al arrancar
       skills/
-        scanner.ts           # indexa SKILL.md del filesystem
+        scanner.ts               # indexa SKILL.md con chokidar (hot-reload)
       routes/
         projects.ts
         agents.ts
         skills.ts
-        tasks.ts
+        tasks.ts                 # endpoints del kanban + lanzar runs
         claudeMd.ts
-        sse.ts
-        queue.ts             # /queue/stats y /runs/:id/diff
-      index.ts
+        sse.ts                   # /runs/:id/stream y /board/stream
+        queue.ts                 # /queue/stats y /runs/:id/diff
+      index.ts                   # entry point
 
-  web/                       # Next.js 15 + Tailwind (placeholder por ahora)
+  web/                          # Frontend Next.js
+    src/
+      app/                       # pages
+      components/
+      lib/api.ts                 # cliente HTTP + helper SSE
 ```
 
 ## Conceptos del dominio
@@ -75,11 +82,11 @@ apps/
   - `workspaceStrategy: "worktree"` si es repo Git → cada run usa `git worktree` con rama nueva.
   - `workspaceStrategy: "copy"` si no es repo Git → copia recursiva (excluye `node_modules`, `.git`, `.next`, `dist`, `build`).
   - La estrategia se detecta automáticamente al crear el proyecto.
-- **Agent** → plantilla: nombre, rol, modelo, `systemPrompt`, budget, skills habilitadas.
-- **Skill** → un `SKILL.md` indexado del filesystem. **Nunca guardamos el contenido en BD, solo ruta + hash SHA256.**
-- **Task** → unidad del kanban. Estados: `todo | in_progress | review | done | blocked`.
-- **TaskRun** → una ejecución concreta. Separada de Task adrede. Guarda `branchName` si estrategia worktree.
-- **ClaudeMd** → contenido markdown con scope `global | project | agent`.
+- **Agent** → plantilla de ejecución: nombre, rol, modelo, `systemPrompt`, budget, y un set de `Skill` habilitadas.
+- **Skill** → un `SKILL.md` indexado del filesystem. **Nunca guardamos el contenido en BD, solo ruta + hash SHA256.** Si el usuario edita un SKILL.md en disco, el scanner (chokidar) lo detecta y actualiza.
+- **Task** → unidad del kanban. Estados: `todo | in_progress | review | done | blocked`. Puede tener `requiredSkillIds` y `dependsOn` (otras tasks).
+- **TaskRun** → una ejecución concreta de una Task por un Agent. Separada de Task adrede: permite reintentos y auditoría de tokens. Estados: `queued | running | succeeded | failed | cancelled`. Guarda `branchName` si la estrategia es worktree.
+- **ClaudeMd** → contenido markdown con scope `global | project | agent`. El del proyecto se inyecta como `CLAUDE.md` en el workspace de cada run.
 
 ## Flujo crítico: ejecución de una task
 
@@ -87,44 +94,48 @@ apps/
 2. Worker toma la run → `executor.executeTaskRun(runId)`:
    a. `setupWorkspace()` → si worktree: `git worktree add`. Si copy: `copyDirShallow`.
    b. `injectWorkspaceResources()` → symlinks de skills (junction en Windows, dir en Unix) + CLAUDE.md.
-   c. Construye el prompt.
-   d. `spawn('claude', ['-p', prompt, '--output-format', 'stream-json', ...])` con `spawnOptions()` multiplataforma.
-   e. Parsea cada línea, acumula tokens, emite eventos por `bus`.
+   c. Construye el prompt (systemPrompt + task + lista de skills).
+   d. `spawn` del binario `claude` con `-p`, `--output-format stream-json` y `spawnOptions()` multiplataforma.
+   e. Parsea cada línea de stdout como JSON, acumula tokens desde `usage`, emite eventos por `bus`.
 3. Al terminar: status final, task → `review` si éxito. Cleanup automático si `failed`/`cancelled`.
 4. Al pasar la task a `done`, cleanup de worktrees de runs `succeeded`.
+5. SSE en `/runs/:id/stream` reenvía todos los eventos al frontend en vivo.
 
 **Invariantes que no debes romper:**
 - Windows usa `spawn` sin `detached` + `killProcessTree` con taskkill.
-- Unix usa `spawn` con `detached: true` + kill de process group.
+- Unix usa `spawn` con `detached: true` + kill del process group.
 - Todo esto ya está en `src/lib/process.ts`, no lo reimplementes.
-- Guarda siempre el log NDJSON en `LOGS_ROOT/{runId}.ndjson`.
-- Una run cancelada/fallida NO mueve la task a `review`.
+- Guarda siempre el log NDJSON en `LOGS_ROOT/{runId}.ndjson`. Una línea = un evento.
+- Una run cancelada o fallida **no** mueve la task a `review`. Solo las `succeeded`.
 
 ## Convenciones de código
 
 - **TypeScript estricto.** Si necesitas `any`, coméntalo.
-- **Imports con extensión `.js`** en la API (ESM con tsx).
-- **Paths absolutos en config**, nunca relativos.
+- **Imports con extensión `.js`** en la API (es ESM con tsx; los imports relativos necesitan `.js` incluso apuntando a `.ts`). Regla: si importas de `./foo.ts`, escribe `./foo.js`.
+- **Paths absolutos en config**, nunca relativos. `config.ts` expande `~` y resuelve todo.
 - **Errores de Prisma**: usa `reply.notFound()` / `reply.badRequest()` de `@fastify/sensible`.
 - **No pongas lógica de negocio en las rutas.** Las rutas orquestan; la lógica de runner vive en `src/runner/`.
+- **No duplicar tipos entre API y Web.** Si un tipo es compartido, extraer a `packages/types` antes de crecer.
 - **Nombres en inglés** en código; mensajes al usuario y docs en español.
-- **Comentarios explican "por qué", no "qué".**
+- **Comentarios explican "por qué", no "qué".** El código ya dice "qué".
 
 ## Cosas que el usuario no quiere
 
 - ❌ Docker obligatorio para dev local.
-- ❌ Multi-tenancy, organizaciones, roles, permisos.
-- ❌ Autenticación compleja.
-- ❌ Reinventar Claude Code. Spawneamos el CLI.
-- ❌ Heartbeats, cron de agentes, agentes 24/7.
-- ❌ Inter-agent messaging (en el MVP).
-- ❌ Abstraer prematuramente.
+- ❌ Multi-tenancy, organizaciones, roles, permisos. Esto es single-user.
+- ❌ Autenticación compleja. Si en algún momento se añade, será un bearer token simple en .env.
+- ❌ Reinventar Claude Code. Spawneamos el CLI. Punto.
+- ❌ Heartbeats, cron de agentes, agentes 24/7. Este no es Paperclip.
+- ❌ Inter-agent messaging. No en el MVP. Si se necesita, discutir antes.
+- ❌ Abstraer prematuramente. Primero código directo que funciona, después refactor.
 
 ## Prioridad actual del MVP
 
 1. Kanban + asignar tareas a agentes (backend ✅, frontend pendiente).
 2. Skills manager centralizado (backend ✅, frontend pendiente).
 3. Editor de CLAUDE.md (backend ✅, frontend pendiente).
+
+Fase 2 (no empezar sin decirlo): dashboard de tokens/costes con Recharts. La instrumentación ya está guardando datos en `TaskRun`.
 
 ## Windows-specific gotchas ya resueltos
 
@@ -134,9 +145,17 @@ apps/
 - Symlinks de skills usan `'junction'` en Windows (no requiere admin).
 - Reaper de runs huérfanas al arrancar.
 
+## Cosas concretas que pueden salir mal
+
+- **`claude` CLI no está en PATH** → falla el spawn. Mensaje de error claro al usuario, no traza cruda.
+- **El SKILL.md tiene frontmatter roto** → `gray-matter` lanza. El scanner debe capturarlo y loggear, no crashear la app.
+- **stream-json no emite JSON en una línea** → ya hay un try/catch en `executor.ts` que lo trata como log plano. No rompas esa tolerancia.
+- **El usuario borra un SKILL.md que está asignado a un agente** → la fila en `AgentSkill` queda huérfana hasta que se limpie. Aceptable por ahora.
+- **Workspace no se limpia al terminar la run** → adrede en runs `succeeded`, para poder inspeccionar el diff. Se limpia al pasar la task a `done`.
+
 ## Cuándo preguntar al usuario
 
-- Si vas a añadir una dependencia nueva no trivial.
+- Si vas a añadir una dependencia nueva que no sea trivial (> 50KB o con subdependencias pesadas).
 - Si vas a cambiar el schema de Prisma.
-- Si vas a introducir un concepto nuevo al modelo de dominio.
+- Si vas a introducir un concepto nuevo al modelo de dominio (un modelo, un estado nuevo en una máquina).
 - Si algo en estas instrucciones choca con lo que el usuario te pide en el chat.
