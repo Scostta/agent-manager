@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-base:    #080809;
+  --bg-2:       #0D0D10;
+  --bg-3:       #131318;
+  --bg-4:       #1A1A20;
+  --bg-5:       #222229;
+  --bg-hover:   #1E1E26;
+  --bg-active:  #26262F;
+  --border-1:   #1E1E26;
+  --border-2:   #28282F;
+  --border-3:   #333340;
+  --text-1:     #EEEEF3;
+  --text-2:     #9696A8;
+  --text-3:     #56566A;
+  --text-inv:   #08080A;
+  --accent:     #7B6CF6;
+  --accent-dim: #2A2550;
+  --accent-hover: #9081F8;
+  --accent-fg:  #FFFFFF;
+  --green:      #3FBA6E;
+  --green-dim:  #1A3A28;
+  --yellow:     #C9961A;
+  --yellow-dim: #352800;
+  --red:        #E05050;
+  --red-dim:    #3A1818;
+  --blue:       #4A9EE8;
+  --blue-dim:   #162840;
+  --orange:     #D9784A;
+  --orange-dim: #351A0A;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 8px;
+  --r-xl: 12px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,.7);
+  --sidebar-w: 200px;
+  --header-h: 44px;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-1);
+  font-family: var(--font-sans), 'IBM Plex Sans', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3);
+}

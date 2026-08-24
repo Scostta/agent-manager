@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Manager — Documentación</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-base:   #0d0d10;
+      --bg-2:      #131318;
+      --bg-3:      #18181f;
+      --bg-4:      #1e1e27;
+      --border:    #2a2a35;
+      --border-2:  #33333f;
+      --text-1:    #e8e8f0;
+      --text-2:    #a8a8b8;
+      --text-3:    #6a6a7a;
+      --accent:    #7c6aff;
+      --accent-dim:#7c6aff22;
+      --green:     #34d399;
+      --green-dim: #34d39918;
+      --blue:      #60a5fa;
+      --blue-dim:  #60a5fa18;
+      --yellow:    #fbbf24;
+      --yellow-dim:#fbbf2418;
+      --red:       #f87171;
+      --red-dim:   #f8717118;
+      --orange:    #fb923c;
+      --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --sans:      'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg-base);
+      color: var(--text-1);
+      font-family: var(--sans);
+      font-size: 14px;
+      line-height: 1.6;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Sidebar nav ─────────────────────────────────────────── */
+    nav {
+      width: 240px;
+      min-width: 240px;
+      background: var(--bg-2);
+      border-right: 1px solid var(--border);
+      padding: 24px 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .nav-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+
+    .nav-logo h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .nav-logo p {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 2px;
+    }
+
+    nav a {
+      display: block;
+      padding: 6px 20px;
+      color: var(--text-3);
+      text-decoration: none;
+      font-size: 12.5px;
+      transition: color .15s, background .15s;
+      border-radius: 0;
+    }
+
+    nav a:hover { color: var(--text-1); background: var(--bg-3); }
+
+    nav .nav-section {
+      padding: 14px 20px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    /* ── Main content ─────────────────────────────────────────── */
+    main {
+      flex: 1;
+      padding: 40px 56px;
+      max-width: 900px;
+      overflow-y: auto;
+    }
+
+    section { margin-bottom: 64px; }
+
+    h2 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin: 28px 0 10px;
+    }
+
+    h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+      margin: 20px 0 8px;
+    }
+
+    p { color: var(--text-2); margin-bottom: 10px; }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    ul, ol { padding-left: 20px; color: var(--text-2); margin-bottom: 10px; }
+    li { margin-bottom: 4px; }
+
+    strong { color: var(--text-1); font-weight: 600; }
+    em { color: var(--text-2); font-style: italic; }
+
+    /* ── Code ─────────────────────────────────────────────────── */
+    code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--bg-4);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    pre {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 12px 0;
+      line-height: 1.7;
+      color: var(--text-2);
+    }
+
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    pre .c  { color: var(--text-3); }        /* comment */
+    pre .k  { color: var(--accent); }        /* keyword / key */
+    pre .s  { color: var(--green); }         /* string */
+    pre .n  { color: var(--blue); }          /* number / name */
+    pre .t  { color: var(--yellow); }        /* type */
+    pre .p  { color: var(--orange); }        /* path */
+
+    /* ── Badges ───────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      margin: 2px 3px;
+    }
+    .badge-green  { background: var(--green-dim); color: var(--green); border: 1px solid #34d39940; }
+    .badge-blue   { background: var(--blue-dim);  color: var(--blue);  border: 1px solid #60a5fa40; }
+    .badge-yellow { background: var(--yellow-dim);color: var(--yellow);border: 1px solid #fbbf2440; }
+    .badge-red    { background: var(--red-dim);   color: var(--red);   border: 1px solid #f8717140; }
+    .badge-accent { background: var(--accent-dim);color: var(--accent);border: 1px solid #7c6aff40; }
+    .badge-gray   { background: var(--bg-4);      color: var(--text-2);border: 1px solid var(--border-2); }
+
+    /* ── Cards ────────────────────────────────────────────────── */
+    .card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 12px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-1);
+      margin-bottom: 6px;
+    }
+
+    .card p { margin-bottom: 0; }
+
+    /* ── Grid ─────────────────────────────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ── Flow diagram ─────────────────────────────────────────── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 16px 0;
+    }
+
+    .flow-step {
+      display: flex;
+      gap: 16px;
+      position: relative;
+    }
+
+    .flow-step::before {
+      content: '';
+      position: absolute;
+      left: 15px;
+      top: 32px;
+      bottom: -8px;
+      width: 1px;
+      background: var(--border-2);
+    }
+
+    .flow-step:last-child::before { display: none; }
+
+    .flow-num {
+      width: 32px;
+      height: 32px;
+      min-width: 32px;
+      border-radius: 50%;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 2px;
+    }
+
+    .flow-body {
+      flex: 1;
+      padding-bottom: 20px;
+    }
+
+    .flow-body strong {
+      font-size: 13px;
+    }
+
+    .flow-body p {
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    /* ── Table ────────────────────────────────────────────────── */
+    .table-wrap { overflow-x: auto; margin: 12px 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 12px;
+      background: var(--bg-3);
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    td {
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      color: var(--text-2);
+      vertical-align: top;
+    }
+
+    tr:hover td { background: var(--bg-3); }
+
+    td code { font-size: 11px; }
+
+    /* ── Callout ──────────────────────────────────────────────── */
+    .callout {
+      border-left: 3px solid var(--accent);
+      background: var(--accent-dim);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+    }
+
+    .callout p { margin: 0; font-size: 13px; }
+    .callout strong { color: var(--accent); }
+
+    .callout-warn {
+      border-color: var(--yellow);
+      background: var(--yellow-dim);
+    }
+
+    .callout-warn strong { color: var(--yellow); }
+
+    /* ── Hero ─────────────────────────────────────────────────── */
+    .hero {
+      background: linear-gradient(135deg, var(--bg-2), var(--bg-3));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 40px;
+    }
+
+    .hero h1 {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 8px;
+    }
+
+    .hero h1 span { color: var(--accent); }
+
+    .hero p {
+      font-size: 15px;
+      color: var(--text-2);
+      margin-bottom: 16px;
+    }
+
+    .hero-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────── -->
+<nav>
+  <div class="nav-logo">
+    <h1>Agent Manager</h1>
+    <p>Documentación técnica</p>
+  </div>
+
+  <div class="nav-section">General</div>
+  <a href="#intro">¿Qué es esto?</a>
+  <a href="#arquitectura">Arquitectura</a>
+  <a href="#stack">Stack técnico</a>
+
+  <div class="nav-section">Modelo de datos</div>
+  <a href="#projects">Proyectos</a>
+  <a href="#agents">Agentes</a>
+  <a href="#skills">Skills</a>
+  <a href="#tasks">Tareas</a>
+  <a href="#runs">TaskRuns</a>
+  <a href="#claudemd">CLAUDE.md</a>
+
+  <div class="nav-section">Funcionamiento</div>
+  <a href="#scanner">Scanner de skills</a>
+  <a href="#flujo-ejecucion">Flujo de ejecución</a>
+  <a href="#workspace">Workspace</a>
+  <a href="#streaming">SSE streaming</a>
+  <a href="#budget">Budget y costes</a>
+
+  <div class="nav-section">API</div>
+  <a href="#endpoints">Endpoints</a>
+  <a href="#config">Configuración</a>
+  <a href="#estructura">Estructura de ficheros</a>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>Agent <span>Manager</span></h1>
+    <p>Dashboard personal para orquestar agentes Claude Code CLI. Define proyectos, configura agentes con sus skills y lanza tareas que se ejecutan de forma autónoma sobre tus repos locales.</p>
+    <div class="hero-tags">
+      <span class="badge badge-accent">Fastify 5</span>
+      <span class="badge badge-accent">Next.js 15</span>
+      <span class="badge badge-accent">Prisma + SQLite</span>
+      <span class="badge badge-blue">claude CLI</span>
+      <span class="badge badge-green">SSE streaming</span>
+      <span class="badge badge-gray">single-user</span>
+      <span class="badge badge-gray">local</span>
+    </div>
+  </div>
+
+  <!-- ── INTRO ──────────────────────────────────────────────────── -->
+  <section id="intro">
+    <h2>¿Qué es esto?</h2>
+    <p>Agent Manager es un dashboard local de un solo usuario para orquestar instancias del <strong>Claude Code CLI</strong>. No es un servidor multi-tenant ni tiene autenticación compleja — arranca con <code>pnpm dev</code> y listo.</p>
+
+    <p>La idea central es: tú defines <strong>proyectos</strong> (rutas a repos locales), <strong>agentes</strong> (con su prompt, modelo y skills) y <strong>tareas</strong> en un kanban. Cuando arrastras una tarea a <em>"En progreso"</em> o pulsas "Ejecutar ahora", el sistema spawnea un proceso <code>claude</code> CLI que trabaja de forma autónoma sobre una copia aislada del repo.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Frontend</div>
+        <p>Next.js 15 App Router en <code>:3000</code>. Kanban con drag&amp;drop, editor de agentes, gestor de skills y vista de ejecución en tiempo real.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Backend</div>
+        <p>Fastify 5 en <code>:3001</code>. REST API + SSE. Prisma con SQLite para persistencia local. <code>p-queue</code> para la cola de ejecuciones.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ARQUITECTURA ───────────────────────────────────────────── -->
+  <section id="arquitectura">
+    <h2>Arquitectura</h2>
+
+    <pre><code>┌─────────────────────────────────────────────────────────────┐
+│                     NAVEGADOR  :3000                        │
+│                                                             │
+│  Kanban ──── TaskDrawer ──── RunViewer                      │
+│     │              │              │                         │
+│     │         Ejecutar ahora   useRunStream (SSE)           │
+│     └──────────────┴──────────────┘                         │
+│                    │                                        │
+│              fetch / SWR                                    │
+└────────────────────┼────────────────────────────────────────┘
+                     │ HTTP REST + SSE
+┌────────────────────┼────────────────────────────────────────┐
+│              API FASTIFY  :3001                             │
+│                    │                                        │
+│  Routes ──── Queue (p-queue) ──── Executor                  │
+│                                       │                     │
+│  Skills Scanner (chokidar)            │ spawn()             │
+│  EventEmitter bus                     ▼                     │
+│  Prisma (SQLite)              claude CLI process            │
+│                                       │                     │
+│                               stdout stream-json            │
+│                               NDJSON log en disco           │
+└───────────────────────────────────────────────────────────  ┘</code></pre>
+
+    <p>El frontend no llama al SDK de Anthropic directamente. Todo pasa a través del CLI de Claude Code, que gestiona el contexto, las herramientas y los permisos de forma nativa.</p>
+  </section>
+
+  <!-- ── STACK ──────────────────────────────────────────────────── -->
+  <section id="stack">
+    <h2>Stack técnico</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Capa</th><th>Tecnología</th><th>Por qué</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Runtime API</td><td>Node.js 24 + TypeScript ESM</td><td>Soporte nativo de módulos ES, tipos estrictos</td></tr>
+          <tr><td>HTTP server</td><td>Fastify 5</td><td>Bajo overhead, plugins bien tipados</td></tr>
+          <tr><td>ORM</td><td>Prisma 5 + SQLite</td><td>Sin servidor de BD externo, migraciones declarativas</td></tr>
+          <tr><td>Cola</td><td>p-queue (en memoria)</td><td>Sin Redis, concurrencia configurable, arranca con <code>pnpm dev</code></td></tr>
+          <tr><td>Tiempo real</td><td>Server-Sent Events (SSE)</td><td>Unidireccional servidor→cliente, nativo en browsers</td></tr>
+          <tr><td>Frontend</td><td>Next.js 15 App Router + React 19</td><td>Server Components, streaming, layouts anidados</td></tr>
+          <tr><td>Estilos</td><td>Tailwind CSS</td><td>Clases utilitarias, sin CSS custom</td></tr>
+          <tr><td>Drag &amp; drop</td><td>@dnd-kit/core</td><td>react-beautiful-dnd está archivado</td></tr>
+          <tr><td>Editor de código</td><td>Monaco Editor</td><td>Para editar CLAUDE.md directamente en la UI</td></tr>
+          <tr><td>Validación</td><td>Zod</td><td>Schemas runtime + tipos inferidos</td></tr>
+          <tr><td>Monorepo</td><td>pnpm workspaces</td><td>Sin Turbo ni Nx, pnpm basta</td></tr>
+          <tr><td>Watching skills</td><td>chokidar</td><td>Hot-reload de SKILL.md sin reiniciar la API</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── PROYECTOS ──────────────────────────────────────────────── -->
+  <section id="projects">
+    <h2>Proyectos</h2>
+    <p>Un <strong>Project</strong> representa un repositorio local en disco. Es el contenedor de un kanban de tareas. Cada proyecto puede tener un <code>CLAUDE.md</code> asociado que se inyecta automáticamente en el workspace al ejecutar tareas.</p>
+
+    <h3>Campos que se guardan en BD</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>id</code></td><td>cuid</td><td>ID único generado por Prisma</td></tr>
+          <tr><td><code>name</code></td><td>String</td><td>Nombre del proyecto en la UI</td></tr>
+          <tr><td><code>description</code></td><td>String?</td><td>Descripción opcional</td></tr>
+          <tr><td><code>repoPath</code></td><td>String</td><td><strong>Ruta absoluta al repo local</strong> — desde aquí se copia el workspace</td></tr>
+          <tr><td><code>claudeMdId</code></td><td>String?</td><td>FK al ClaudeMd del proyecto (nullable)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p><strong>Importante:</strong> <code>repoPath</code> debe ser una ruta absoluta que exista en el sistema. El ejecutor copia todo el contenido de ese directorio al workspace (excepto <code>node_modules</code> y <code>.git</code>).</p>
+    </div>
+  </section>
+
+  <!-- ── AGENTES ────────────────────────────────────────────────── -->
+  <section id="agents">
+    <h2>Agentes</h2>
+    <p>Un <strong>Agent</strong> es una plantilla de ejecución. Define <em>cómo</em> se comporta el proceso de Claude: qué modelo usa, cuál es su rol, qué instrucciones de sistema tiene y qué skills puede usar.</p>
+
+    <h3>Campos</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Tipo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>String</td><td>Nombre visible en la UI</td></tr>
+          <tr><td><code>role</code></td><td>String</td><td>Rol semántico: <code>developer</code>, <code>reviewer</code>, <code>researcher</code>… o cualquier string</td></tr>
+          <tr><td><code>model</code></td><td>String</td><td>ID del modelo Claude: <code>claude-sonnet-4-6</code>, <code>claude-opus-4-7</code>, <code>claude-haiku-4-5-20251001</code></td></tr>
+          <tr><td><code>systemPrompt</code></td><td>String</td><td>Instrucciones de sistema del agente. Se inyectan al inicio del prompt que recibe el CLI</td></tr>
+          <tr><td><code>maxBudgetUsd</code></td><td>Float?</td><td>Límite de gasto en USD por run. Si se supera, la run se cancela con SIGTERM</td></tr>
+          <tr><td><code>status</code></td><td>String</td><td><code>idle</code> | <code>running</code> | <code>paused</code> | <code>disabled</code></td></tr>
+          <tr><td><code>skills</code></td><td>AgentSkill[]</td><td>Relación muchos-a-muchos con Skills habilitadas para este agente</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p><strong>Dónde se guarda:</strong> en la base de datos SQLite (<code>apps/api/prisma/dev.db</code>). La relación agente↔skill se guarda en la tabla <code>AgentSkill</code> con <code>(agentId, skillId)</code> como PK compuesta.</p>
+    </div>
+  </section>
+
+  <!-- ── SKILLS ─────────────────────────────────────────────────── -->
+  <section id="skills">
+    <h2>Skills</h2>
+    <p>Una <strong>Skill</strong> es un fichero <code>SKILL.md</code> en disco. La base de datos <strong>nunca guarda el contenido</strong>, solo la ruta y un hash SHA-256 para detectar cambios. Si el fichero se edita fuera de la app, el scanner lo detecta automáticamente.</p>
+
+    <h3>Estructura de un SKILL.md</h3>
+    <pre><code><span class="c">---</span>
+<span class="k">name</span>: <span class="s">mi-skill</span>
+<span class="k">description</span>: <span class="s">Explica qué hace esta skill</span>
+<span class="k">tags</span>: <span class="s">[typescript, testing, docs]</span>
+<span class="c">---</span>
+
+<span class="c"># Contenido de la skill</span>
+
+Instrucciones en markdown que Claude Code leerá cuando ejecute una tarea
+que requiera esta skill. Puede contener ejemplos de código, convenciones,
+checklists, etc.</code></pre>
+
+    <h3>Cómo se indexan</h3>
+    <p>Al arrancar la API, el <strong>Skills Scanner</strong> (<code>apps/api/src/skills/scanner.ts</code>) recorre recursivamente los directorios definidos en <code>SKILLS_PATHS</code> buscando ficheros llamados exactamente <code>SKILL.md</code>. Por cada uno:</p>
+    <ol>
+      <li>Parsea el frontmatter YAML con <code>gray-matter</code></li>
+      <li>Calcula un hash SHA-256 del contenido</li>
+      <li>Hace un <code>upsert</code> en la tabla <code>Skill</code> (insert o update si ya existe)</li>
+    </ol>
+
+    <p>Además, <strong>chokidar</strong> vigila esos directorios en tiempo real: si añades, editas o borras un <code>SKILL.md</code>, la base de datos se actualiza sin reiniciar la API.</p>
+
+    <h3>Dónde busca las skills</h3>
+    <p>Configurable en la variable de entorno <code>SKILLS_PATHS</code> (paths separados por coma). Por defecto busca en <code>./skills</code> relativo al directorio de la API.</p>
+
+    <h3>Scope de una skill</h3>
+    <p>El scope se infiere de la ruta del fichero:</p>
+    <ul>
+      <li>Si la ruta contiene <code>/public/</code> → <span class="badge badge-green">public</span></li>
+      <li>Cualquier otra ruta → <span class="badge badge-blue">user</span></li>
+    </ul>
+
+    <h3>Qué se guarda en la BD</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>name</code></td><td>Del frontmatter <code>name:</code>. Si falta, usa el nombre del directorio padre del SKILL.md</td></tr>
+          <tr><td><code>description</code></td><td>Del frontmatter <code>description:</code></td></tr>
+          <tr><td><code>filePath</code></td><td>Ruta absoluta al SKILL.md en disco</td></tr>
+          <tr><td><code>contentHash</code></td><td>SHA-256 del contenido — para detectar cambios</td></tr>
+          <tr><td><code>scope</code></td><td>Inferido de la ruta: <code>public</code> o <code>user</code></td></tr>
+          <tr><td><code>tags</code></td><td>Array JSON serializado como string: <code>["typescript","testing"]</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout-warn callout">
+      <p><strong>Nota:</strong> El contenido del SKILL.md nunca se guarda en la BD. Si borras el fichero en disco y había agentes que lo tenían asignado, la relación <code>AgentSkill</code> queda huérfana hasta que se limpie manualmente o se ejecute un cleanup al arranque.</p>
+    </div>
+  </section>
+
+  <!-- ── TAREAS ──────────────────────────────────────────────────── -->
+  <section id="tasks">
+    <h2>Tareas (Kanban)</h2>
+    <p>Una <strong>Task</strong> es la unidad del kanban. Pertenece a un proyecto y puede tener un agente asignado. Los estados del kanban reflejan el ciclo de vida de la tarea.</p>
+
+    <h3>Estados</h3>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 12px 0;">
+      <span class="badge badge-gray">todo</span>
+      <span class="badge badge-blue">in_progress</span>
+      <span class="badge badge-yellow">review</span>
+      <span class="badge badge-green">done</span>
+      <span class="badge badge-red">blocked</span>
+    </div>
+
+    <p>Cuando una run termina con éxito (<code>exit code 0</code>), la tarea pasa automáticamente a <span class="badge badge-yellow">review</span> para que el humano la valide. Si la run falla o se cancela, la tarea permanece en su estado anterior.</p>
+
+    <h3>Campos destacados</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>title</code></td><td>Título corto que aparece en la tarjeta del kanban</td></tr>
+          <tr><td><code>description</code></td><td>Descripción detallada. Se incluye en el prompt que recibe el agente</td></tr>
+          <tr><td><code>assignedAgentId</code></td><td>Agente que ejecutará la tarea. Necesario para poder lanzar una run</td></tr>
+          <tr><td><code>requiredSkillIds</code></td><td>Array JSON de IDs de skills. Informativo — las skills del agente son las que se montan en el workspace</td></tr>
+          <tr><td><code>dependsOn</code></td><td>Array JSON de IDs de otras tasks. No bloquea ejecución (es informativo en el MVP)</td></tr>
+          <tr><td><code>position</code></td><td>Orden dentro de la columna del kanban</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── RUNS ───────────────────────────────────────────────────── -->
+  <section id="runs">
+    <h2>TaskRuns (Ejecuciones)</h2>
+    <p>Un <strong>TaskRun</strong> es una ejecución concreta de una Task por un Agente. Está separado de Task a propósito: permite reintentos y mantiene un historial completo de cada ejecución con sus tokens y costes.</p>
+
+    <h3>Estados</h3>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin: 12px 0;">
+      <span class="badge badge-yellow">queued</span>
+      <span class="badge badge-blue">running</span>
+      <span class="badge badge-green">succeeded</span>
+      <span class="badge badge-red">failed</span>
+      <span class="badge badge-gray">cancelled</span>
+    </div>
+
+    <h3>Qué guarda un TaskRun</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Campo</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>workspacePath</code></td><td>Ruta absoluta al workspace aislado creado para esta run</td></tr>
+          <tr><td><code>logPath</code></td><td>Ruta al fichero NDJSON con todos los eventos del proceso claude</td></tr>
+          <tr><td><code>inputTokens</code></td><td>Tokens de entrada acumulados</td></tr>
+          <tr><td><code>outputTokens</code></td><td>Tokens de salida acumulados</td></tr>
+          <tr><td><code>cacheReadTokens</code></td><td>Tokens leídos de prompt cache</td></tr>
+          <tr><td><code>costUsd</code></td><td>Coste estimado en USD según el modelo</td></tr>
+          <tr><td><code>pid</code></td><td>PID del proceso claude — necesario para matarlo con SIGTERM</td></tr>
+          <tr><td><code>resultSummary</code></td><td>Resumen del resultado (si el agente lo entrega)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p><strong>El workspace no se borra al terminar.</strong> Queda en disco para que puedas inspeccionar los cambios que hizo el agente. El GC es manual o cuando el usuario lo decida.</p>
+    </div>
+  </section>
+
+  <!-- ── CLAUDE.MD ──────────────────────────────────────────────── -->
+  <section id="claudemd">
+    <h2>CLAUDE.md</h2>
+    <p>Los documentos <strong>ClaudeMd</strong> son instrucciones persistentes para Claude Code en formato Markdown. Se editan desde la sección "CLAUDE.md" de la app con el editor Monaco.</p>
+
+    <h3>Scopes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Scope</th><th>Cuándo se usa</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-accent">global</span></td><td>Instrucciones generales para todos los proyectos</td></tr>
+          <tr><td><span class="badge badge-blue">project</span></td><td>Instrucciones específicas de un proyecto. Se inyectan como <code>CLAUDE.md</code> en la raíz del workspace al ejecutar cualquier tarea de ese proyecto</td></tr>
+          <tr><td><span class="badge badge-gray">agent</span></td><td>Instrucciones específicas de un agente (uso futuro)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>El contenido del ClaudeMd de scope <code>project</code> se escribe literalmente en <code>{workspace}/CLAUDE.md</code> antes de lanzar el CLI, de modo que Claude Code lo lee automáticamente siguiendo su convención estándar.</p>
+  </section>
+
+  <!-- ── SCANNER ────────────────────────────────────────────────── -->
+  <section id="scanner">
+    <h2>Scanner de Skills</h2>
+    <p>El scanner (<code>apps/api/src/skills/scanner.ts</code>) se encarga de mantener la base de datos sincronizada con los ficheros <code>SKILL.md</code> del sistema de ficheros.</p>
+
+    <h3>Al arrancar la API</h3>
+    <ol>
+      <li>Llama a <code>scanSkills()</code> → recorre todos los paths de <code>SKILLS_PATHS</code></li>
+      <li>Para cada <code>SKILL.md</code> encontrado: parsea frontmatter, calcula hash, hace <code>db.skill.upsert()</code></li>
+      <li>Inicia <code>watchSkills()</code> → chokidar observa cambios en tiempo real</li>
+    </ol>
+
+    <h3>Eventos que maneja chokidar</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Evento</th><th>Acción</th></tr></thead>
+        <tbody>
+          <tr><td><code>add</code> (fichero nuevo)</td><td>Upsert en BD</td></tr>
+          <tr><td><code>change</code> (fichero modificado)</td><td>Upsert en BD (actualiza hash, description, tags)</td></tr>
+          <tr><td><code>unlink</code> (fichero borrado)</td><td><code>db.skill.deleteMany({ where: { filePath } })</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout-warn callout">
+      <p><strong>Si el frontmatter de un SKILL.md tiene errores de YAML</strong>, <code>gray-matter</code> lanza una excepción. El scanner la captura, la loguea con <code>console.warn</code> y continúa con el siguiente fichero. La API no cae.</p>
+    </div>
+  </section>
+
+  <!-- ── FLUJO EJECUCIÓN ────────────────────────────────────────── -->
+  <section id="flujo-ejecucion">
+    <h2>Flujo de ejecución de una tarea</h2>
+    <p>Esto es lo que ocurre en detalle cuando pulsas <strong>"Ejecutar ahora"</strong> en una tarea:</p>
+
+    <div class="flow">
+
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-body">
+          <strong>Frontend → POST /tasks/:id/run</strong>
+          <p>El TaskDrawer llama a <code>tasks.run(taskId)</code>. El backend recibe la petición en <code>apps/api/src/routes/tasks.ts</code>.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-body">
+          <strong>Crear TaskRun y encolar</strong>
+          <p>Se crea un registro <code>TaskRun</code> en BD con <code>status: "queued"</code>. La tarea pasa a <code>in_progress</code>. La run se añade a la <code>p-queue</code> (concurrencia máxima: 2). Se devuelve el <code>runId</code> al frontend.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-body">
+          <strong>Frontend navega a /runs/:id</strong>
+          <p>Con el <code>runId</code> recibido, el frontend navega a la vista de ejecución y el hook <code>useRunStream</code> abre una conexión SSE a <code>/runs/:id/stream</code>.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-body">
+          <strong>Worker toma la run → executor.executeTaskRun(runId)</strong>
+          <p>Cuando hay slot libre en la queue, el worker llama al ejecutor con el <code>runId</code>. Se carga el run completo de BD incluyendo la tarea, el proyecto y el agente con sus skills.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-body">
+          <strong>Preparar workspace</strong>
+          <p>Se crea el directorio <code>WORKSPACES_ROOT/{taskId}/{runId}/</code>. Se copia recursivamente el repo del proyecto (<code>repoPath</code>) al workspace, <strong>ignorando <code>node_modules</code> y <code>.git</code></strong>.</p>
+          <pre><code><span class="p">WORKSPACES_ROOT/
+  {taskId}/
+    {runId}/
+      src/          ← copia del repo
+      package.json
+      .claude/
+        skills/
+          mi-skill/ → symlink al directorio del SKILL.md
+      CLAUDE.md     ← inyectado si el proyecto tiene uno</span></code></pre>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">6</div>
+        <div class="flow-body">
+          <strong>Instalar skills como symlinks</strong>
+          <p>Por cada skill habilitada en el agente, se crea un symlink en <code>.claude/skills/{skill.name}/</code> apuntando al directorio del <code>SKILL.md</code> en disco. Claude Code los carga automáticamente.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">7</div>
+        <div class="flow-body">
+          <strong>Inyectar CLAUDE.md del proyecto</strong>
+          <p>Si el proyecto tiene un <code>ClaudeMd</code> asociado, se escribe su contenido en <code>{workspace}/CLAUDE.md</code>. Claude Code lo lee al arrancar.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">8</div>
+        <div class="flow-body">
+          <strong>Construir el prompt</strong>
+          <p>El prompt que recibe el CLI es la concatenación de:</p>
+          <pre><code>{<span class="k">agent.systemPrompt</span>}
+
+---
+# Tu tarea asignada
+
+**{<span class="k">task.title</span>}**
+
+{<span class="k">task.description</span>}
+
+---
+Tienes disponibles estas skills: {<span class="k">skill1, skill2</span>}.
+Cárgalas desde .claude/skills/ cuando sean relevantes.
+
+Trabaja sobre el workspace actual. Cuando termines, entrega
+un resumen breve del trabajo hecho.</code></pre>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">9</div>
+        <div class="flow-body">
+          <strong>Spawn del proceso claude CLI</strong>
+          <p>Se ejecuta el CLI con los flags necesarios:</p>
+          <pre><code><span class="n">claude</span> \
+  <span class="k">-p</span> <span class="s">"{prompt}"</span> \
+  <span class="k">--output-format</span> <span class="s">stream-json</span> \
+  <span class="k">--verbose</span> \
+  <span class="k">--model</span> <span class="s">{agent.model}</span> \
+  <span class="k">--permission-mode</span> <span class="s">acceptEdits</span></code></pre>
+          <p>El proceso se lanza con <code>detached: true</code> para poder matar el <em>process group</em> entero con <code>kill(-pid, 'SIGTERM')</code> si se cancela.</p>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">10</div>
+        <div class="flow-body">
+          <strong>Parsear stream-json línea a línea</strong>
+          <p>El stdout del proceso se procesa línea a línea con <code>readline</code>. Cada línea es un objeto JSON del protocolo de Claude Code:</p>
+          <ul>
+            <li>Si contiene <code>usage</code> → acumula tokens, calcula coste, emite evento SSE</li>
+            <li>Toda línea se escribe al log NDJSON (<code>LOGS_ROOT/{runId}.ndjson</code>)</li>
+            <li>Toda línea se emite al EventEmitter bus → llega al SSE del frontend</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-num">11</div>
+        <div class="flow-body">
+          <strong>Exit del proceso → estado final</strong>
+          <p>Cuando el proceso termina:</p>
+          <ul>
+            <li><code>signal === 'SIGTERM'</code> → <span class="badge badge-gray">cancelled</span></li>
+            <li><code>exit code 0</code> → <span class="badge badge-green">succeeded</span> + tarea pasa a <span class="badge badge-yellow">review</span></li>
+            <li><code>exit code ≠ 0</code> → <span class="badge badge-red">failed</span></li>
+          </ul>
+          <p>Se emite evento SSE de status final y se emite <code>board</code> event para que el kanban refresqe.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── WORKSPACE ──────────────────────────────────────────────── -->
+  <section id="workspace">
+    <h2>Workspace</h2>
+    <p>Cada run trabaja sobre una copia <strong>completamente aislada</strong> del repositorio. Esto garantiza que las ejecuciones concurrentes no se interfieren entre sí.</p>
+
+    <pre><code><span class="p">WORKSPACES_ROOT/              </span><span class="c">← por defecto: apps/api/workspaces/</span>
+  <span class="t">{taskId}/</span>
+    <span class="t">{runId}/</span>                  <span class="c">← workspace de esta run concreta</span>
+      src/
+      package.json
+      ...                       <span class="c">← copia del repo (sin node_modules ni .git)</span>
+      <span class="n">.claude/</span>
+        <span class="n">skills/</span>
+          <span class="n">mi-skill/</span>           <span class="c">← symlink → /ruta/original/de/la/skill/</span>
+      <span class="n">CLAUDE.md</span>               <span class="c">← inyectado desde BD si existe</span>
+
+<span class="p">LOGS_ROOT/                    </span><span class="c">← por defecto: apps/api/logs/</span>
+  <span class="t">{runId}</span><span class="k">.ndjson</span>              <span class="c">← una línea JSON por evento del proceso</span></code></pre>
+
+    <div class="callout">
+      <p><strong>El workspace persiste tras la ejecución</strong> para que puedas revisar los cambios del agente. Si quieres limpiarlo, borra el directorio manualmente o implementa un GC.</p>
+    </div>
+  </section>
+
+  <!-- ── STREAMING ──────────────────────────────────────────────── -->
+  <section id="streaming">
+    <h2>SSE Streaming</h2>
+    <p>La comunicación en tiempo real usa <strong>Server-Sent Events</strong>. El servidor emite eventos y el browser los recibe con <code>EventSource</code>. No hay WebSockets.</p>
+
+    <h3>Endpoints SSE</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Endpoint</th><th>Qué emite</th></tr></thead>
+        <tbody>
+          <tr><td><code>GET /runs/:id/stream</code></td><td>Todos los eventos de una run concreta (logs, tokens, status)</td></tr>
+          <tr><td><code>GET /board/stream</code></td><td>Cambios en el kanban (task creada, actualizada, borrada) + pings cada 30s</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Tipos de eventos SSE de una run</h3>
+    <pre><code><span class="c">// Cambio de estado</span>
+{ <span class="k">type</span>: <span class="s">"status"</span>, <span class="k">status</span>: <span class="s">"queued" | "running" | "succeeded" | "failed" | "cancelled"</span> }
+
+<span class="c">// Actualización de tokens y coste</span>
+{ <span class="k">type</span>: <span class="s">"token_usage"</span>, <span class="k">inputTokens</span>: <span class="n">number</span>, <span class="k">outputTokens</span>: <span class="n">number</span>,
+  <span class="k">cacheReadTokens</span>: <span class="n">number</span>, <span class="k">costUsd</span>: <span class="n">number</span> }
+
+<span class="c">// Línea de log del proceso claude</span>
+{ <span class="k">type</span>: <span class="s">"log"</span>, <span class="k">line</span>: <span class="s">string</span> }
+
+<span class="c">// Error</span>
+{ <span class="k">type</span>: <span class="s">"error"</span>, <span class="k">message</span>: <span class="s">string</span> }
+
+<span class="c">// Keepalive</span>
+{ <span class="k">type</span>: <span class="s">"ping"</span> }</code></pre>
+
+    <h3>Arquitectura interna del bus</h3>
+    <p>El executor emite eventos al <strong>EventEmitter bus</strong> (<code>apps/api/src/bus.ts</code>). Las rutas SSE se suscriben a ese bus y reenvían los eventos al cliente HTTP. Cuando el cliente desconecta, el listener se elimina.</p>
+  </section>
+
+  <!-- ── BUDGET ─────────────────────────────────────────────────── -->
+  <section id="budget">
+    <h2>Budget y cálculo de costes</h2>
+    <p>Cada agente puede tener un <code>maxBudgetUsd</code>. El ejecutor acumula tokens y calcula el coste después de cada evento de <code>usage</code>. Si el coste supera el budget, cancela la run con <code>SIGTERM</code>.</p>
+
+    <h3>Precios por modelo (USD por millón de tokens)</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Modelo</th><th>Input</th><th>Output</th><th>Cache Read</th></tr></thead>
+        <tbody>
+          <tr><td><code>claude-opus-4-7</code></td><td>$15</td><td>$75</td><td>$1.50</td></tr>
+          <tr><td><code>claude-opus-4-6</code></td><td>$15</td><td>$75</td><td>$1.50</td></tr>
+          <tr><td><code>claude-sonnet-4-6</code></td><td>$3</td><td>$15</td><td>$0.30</td></tr>
+          <tr><td><code>claude-haiku-4-5-20251001</code></td><td>$1</td><td>$5</td><td>$0.10</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Estos precios están en <code>apps/api/src/runner/pricing.ts</code>. Actualízalos si cambian en <a href="https://docs.anthropic.com/en/docs/about-claude/models" target="_blank">docs.anthropic.com</a>.</p>
+  </section>
+
+  <!-- ── ENDPOINTS ──────────────────────────────────────────────── -->
+  <section id="endpoints">
+    <h2>Endpoints de la API</h2>
+
+    <h3>Proyectos</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/projects</code></td><td>Lista todos los proyectos</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/projects</code></td><td>Crea un proyecto</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/projects/:id</code></td><td>Proyecto con tasks y claudeMd</td></tr>
+          <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/projects/:id</code></td><td>Actualiza nombre / descripción / repoPath</td></tr>
+          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/projects/:id</code></td><td>Borra proyecto en cascada</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/projects/:id/tasks</code></td><td>Tasks del proyecto con última run</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Agentes</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/agents</code></td><td>Lista todos los agentes con skills</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/agents</code></td><td>Crea agente (incluye <code>skillIds[]</code>)</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/agents/:id</code></td><td>Agente con skills</td></tr>
+          <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/agents/:id</code></td><td>Actualiza agente + reemplaza skills</td></tr>
+          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/agents/:id</code></td><td>Borra agente</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Skills</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/skills</code></td><td>Lista skills indexadas (tags como array)</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/skills/:id/content</code></td><td>Contenido del SKILL.md leído de disco</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/skills/rescan</code></td><td>Re-indexa todos los SKILL.md manualmente</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Tareas</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/tasks</code></td><td>Crea una tarea</td></tr>
+          <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/tasks/:id</code></td><td>Actualiza título, descripción, agente, skills</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/tasks/:id/move</code></td><td>Cambia estado y posición (drag &amp; drop)</td></tr>
+          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/tasks/:id</code></td><td>Borra tarea y sus runs en cascada</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/tasks/:id/run</code></td><td><strong>Lanza una ejecución.</strong> Devuelve <code>{ runId }</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Runs</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs/:id</code></td><td>Run con task y agente</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/runs/:id/cancel</code></td><td>Cancela la run (SIGTERM al process group)</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs/:id/stream</code></td><td>SSE stream de eventos en tiempo real</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Otros</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/claude-md</code></td><td>Lista documentos CLAUDE.md</td></tr>
+          <tr><td><span class="badge badge-green">POST</span></td><td><code>/claude-md</code></td><td>Crea documento</td></tr>
+          <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/claude-md/:id</code></td><td>Actualiza contenido y scope</td></tr>
+          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/claude-md/:id</code></td><td>Borra documento</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/board/stream</code></td><td>SSE del kanban (task events + pings)</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/queue/stats</code></td><td>Estado de la cola: <code>{ size, pending }</code></td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/health</code></td><td>Healthcheck: <code>{ ok: true, time }</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ── CONFIG ─────────────────────────────────────────────────── -->
+  <section id="config">
+    <h2>Configuración (variables de entorno)</h2>
+    <p>Todas las variables se leen en <code>apps/api/src/config.ts</code>. Crea un fichero <code>apps/api/.env</code> para sobreescribir los valores por defecto.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Variable</th><th>Por defecto</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><code>PORT</code></td><td><code>3001</code></td><td>Puerto del servidor Fastify</td></tr>
+          <tr><td><code>DATABASE_URL</code></td><td><code>file:./dev.db</code></td><td>Ruta a la base de datos SQLite</td></tr>
+          <tr><td><code>WORKSPACES_ROOT</code></td><td><code>./workspaces</code></td><td>Directorio donde se crean los workspaces de cada run. Soporta <code>~</code></td></tr>
+          <tr><td><code>LOGS_ROOT</code></td><td><code>./logs</code></td><td>Directorio donde se guardan los ficheros NDJSON de cada run. Soporta <code>~</code></td></tr>
+          <tr><td><code>SKILLS_PATHS</code></td><td><code>./skills</code></td><td>Paths separados por coma donde buscar <code>SKILL.md</code>. Soporta <code>~</code></td></tr>
+          <tr><td><code>ANTHROPIC_API_KEY</code></td><td>—</td><td>API key de Anthropic. Si no se define, el CLI usará la suya propia del sistema</td></tr>
+          <tr><td><code>CLAUDE_CLI</code></td><td><code>claude</code></td><td>Nombre o ruta del binario del Claude Code CLI. Si no está en PATH, especifica la ruta absoluta</td></tr>
+          <tr><td><code>NEXT_PUBLIC_API_URL</code></td><td><code>http://localhost:3001</code></td><td>URL base de la API (en <code>apps/web/.env.local</code>)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout-warn callout">
+      <p><strong>Si <code>claude</code> no está en PATH</strong>, el spawn falla y la run queda en <code>failed</code>. Instala Claude Code CLI con <code>npm install -g @anthropic-ai/claude-code</code> y asegúrate de que esté en tu PATH.</p>
+    </div>
+  </section>
+
+  <!-- ── ESTRUCTURA ─────────────────────────────────────────────── -->
+  <section id="estructura">
+    <h2>Estructura de ficheros</h2>
+    <pre><code><span class="p">agent-manager/</span>
+├── <span class="k">package.json</span>              <span class="c">← scripts del monorepo (pnpm workspaces)</span>
+├── <span class="k">pnpm-workspace.yaml</span>
+├── <span class="k">index.html</span>                <span class="c">← este documento</span>
+│
+├── <span class="p">apps/</span>
+│   ├── <span class="p">api/</span>                  <span class="c">← Backend Fastify</span>
+│   │   ├── <span class="k">prisma/</span>
+│   │   │   ├── <span class="k">schema.prisma</span> <span class="c">← modelo de datos</span>
+│   │   │   ├── <span class="k">seed.ts</span>
+│   │   │   └── <span class="k">dev.db</span>        <span class="c">← base de datos SQLite (generada)</span>
+│   │   └── <span class="k">src/</span>
+│   │       ├── <span class="k">index.ts</span>      <span class="c">← entry point, arranque</span>
+│   │       ├── <span class="k">config.ts</span>     <span class="c">← todas las env vars</span>
+│   │       ├── <span class="k">db.ts</span>         <span class="c">← singleton PrismaClient</span>
+│   │       ├── <span class="k">bus.ts</span>        <span class="c">← EventEmitter interno</span>
+│   │       ├── <span class="p">runner/</span>
+│   │       │   ├── <span class="k">executor.ts</span>  <span class="c">← spawn claude CLI + parseo stream</span>
+│   │       │   ├── <span class="k">queue.ts</span>     <span class="c">← p-queue global</span>
+│   │       │   └── <span class="k">pricing.ts</span>   <span class="c">← precios por modelo</span>
+│   │       ├── <span class="p">skills/</span>
+│   │       │   └── <span class="k">scanner.ts</span>   <span class="c">← indexer + chokidar watcher</span>
+│   │       └── <span class="p">routes/</span>
+│   │           ├── <span class="k">projects.ts</span>
+│   │           ├── <span class="k">agents.ts</span>
+│   │           ├── <span class="k">skills.ts</span>
+│   │           ├── <span class="k">tasks.ts</span>
+│   │           ├── <span class="k">claudeMd.ts</span>
+│   │           └── <span class="k">sse.ts</span>      <span class="c">← /runs/:id/stream y /board/stream</span>
+│   │
+│   └── <span class="p">web/</span>                  <span class="c">← Frontend Next.js 15</span>
+│       └── <span class="k">src/</span>
+│           ├── <span class="p">app/</span>
+│           │   ├── <span class="k">layout.tsx</span>
+│           │   ├── <span class="k">page.tsx</span>          <span class="c">← redirect a /projects</span>
+│           │   ├── <span class="p">projects/</span>
+│           │   │   ├── <span class="k">page.tsx</span>      <span class="c">← listado de proyectos</span>
+│           │   │   └── <span class="p">[id]/</span>
+│           │   │       ├── <span class="k">page.tsx</span>  <span class="c">← kanban del proyecto</span>
+│           │   │       └── <span class="p">_components/</span>
+│           │   │           ├── <span class="k">kanban-board.client.tsx</span>
+│           │   │           ├── <span class="k">task-card.client.tsx</span>
+│           │   │           ├── <span class="k">task-drawer.client.tsx</span>
+│           │   │           └── <span class="k">add-task-form.client.tsx</span>
+│           │   ├── <span class="p">runs/[id]/</span>
+│           │   │   ├── <span class="k">page.tsx</span>      <span class="c">← vista de ejecución</span>
+│           │   │   └── <span class="k">_components/run-viewer.client.tsx</span>
+│           │   ├── <span class="p">agents/</span>
+│           │   ├── <span class="p">skills/</span>
+│           │   └── <span class="p">claude-md/</span>
+│           ├── <span class="p">components/ui/</span>
+│           │   ├── <span class="k">badge.tsx</span>
+│           │   ├── <span class="k">button.tsx</span>
+│           │   ├── <span class="k">status-dot.tsx</span>
+│           │   └── <span class="k">...</span>
+│           ├── <span class="p">hooks/</span>
+│           │   ├── <span class="k">use-run-stream.ts</span>   <span class="c">← SSE hook para runs</span>
+│           │   └── <span class="k">use-board-stream.ts</span>  <span class="c">← SSE hook para el kanban</span>
+│           └── <span class="k">lib/api.ts</span>            <span class="c">← cliente HTTP tipado</span>
+│
+└── <span class="p">packages/</span>
+    └── <span class="p">types/src/index.ts</span>   <span class="c">← tipos compartidos API ↔ Web</span></code></pre>
+  </section>
+
+</main>
+
+</body>
+</html>

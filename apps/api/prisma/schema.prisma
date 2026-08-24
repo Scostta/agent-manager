@@ -1,0 +1,110 @@
+// Claude Cockpit - schema de datos
+// Uso personal local con SQLite. Migrar a Postgres es cambiar el provider.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  repoPath      String   // ruta absoluta al repo local donde trabajan los agentes
+  claudeMdId    String?  @unique
+  claudeMd      ClaudeMd? @relation(fields: [claudeMdId], references: [id])
+  tasks         Task[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Agent {
+  id            String       @id @default(cuid())
+  name          String
+  role          String       // "developer" | "reviewer" | "researcher" | custom
+  model         String       // "claude-opus-4-7" | "claude-sonnet-4-6" | ...
+  systemPrompt  String
+  maxBudgetUsd  Float?
+  status        String       @default("idle") // idle | running | paused | disabled
+  skills        AgentSkill[]
+  tasks         Task[]
+  runs          TaskRun[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model Skill {
+  id           String       @id @default(cuid())
+  name         String       @unique
+  description  String
+  filePath     String       // ruta absoluta al SKILL.md
+  contentHash  String       // sha256 para detectar cambios
+  scope        String       // "public" | "user" | "project"
+  tags         String       // JSON array: ["docx","writing"]
+  agents       AgentSkill[]
+  updatedAt    DateTime     @updatedAt
+}
+
+model AgentSkill {
+  agentId String
+  skillId String
+  agent   Agent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill   Skill  @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([agentId, skillId])
+}
+
+model Task {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  description      String
+  status           String    @default("todo") // todo | in_progress | review | done | blocked
+  priority         Int       @default(0)
+  assignedAgentId  String?
+  assignedAgent    Agent?    @relation(fields: [assignedAgentId], references: [id])
+  requiredSkillIds String    @default("[]") // JSON array
+  dependsOn        String    @default("[]") // JSON array de task ids
+  position         Int       // orden dentro de la columna
+  runs             TaskRun[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([projectId, status])
+}
+
+model TaskRun {
+  id              String    @id @default(cuid())
+  taskId          String
+  task            Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  agentId         String
+  agent           Agent     @relation(fields: [agentId], references: [id])
+  status          String    // queued | running | succeeded | failed | cancelled
+  workspacePath   String
+  inputTokens     Int       @default(0)
+  outputTokens    Int       @default(0)
+  cacheReadTokens Int       @default(0)
+  costUsd         Float     @default(0)
+  logPath         String    // ruta al NDJSON con el stream de eventos
+  resultSummary   String?
+  pid             Int?      // PID del proceso claude para poder matarlo
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+
+  @@index([taskId])
+  @@index([status])
+}
+
+model ClaudeMd {
+  id        String   @id @default(cuid())
+  scope     String   // "global" | "project" | "agent"
+  content   String
+  filePath  String?  // si se sincroniza a disco
+  project   Project?
+  updatedAt DateTime @updatedAt
+}

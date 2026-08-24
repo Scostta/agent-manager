@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.next/
+*.log
+.DS_Store
+
+# Env
+.env
+.env.local
+
+# Runtime
+apps/api/dev.db
+apps/api/dev.db-journal
+apps/api/workspaces/
+apps/api/logs/
