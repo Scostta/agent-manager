@@ -17,6 +17,8 @@ import type {
   SkillContent,
   StatsSummary,
   StopResult,
+  WorkspaceReport,
+  GcResult,
   Task,
   TaskStatus,
 } from "@/lib/types";
@@ -245,3 +247,12 @@ export const setQueueConcurrency = (concurrency: number) =>
 
 /** Kill switch: mata lo que corre, descarta lo que espera y deja en pausa. */
 export const stopQueue = () => api<StopResult>("/queue/stop", { method: "POST" });
+
+/* ── Workspaces ───────────────────────────────────────────────────────────── */
+
+export const getWorkspaceReport = (days?: number) =>
+  api<WorkspaceReport>(`/workspaces${days === undefined ? "" : `?days=${days}`}`);
+
+/** Con dryRun devuelve lo que se llevaría sin tocar el disco. */
+export const collectWorkspaces = (options: { days?: number; dryRun?: boolean } = {}) =>
+  api<GcResult>("/workspaces/gc", { method: "POST", ...json(options) });

@@ -186,7 +186,7 @@ Fase 2 (no empezar sin decirlo): dashboard de tokens/costes con Recharts. La ins
 - **El SKILL.md tiene frontmatter roto** → `gray-matter` lanza. El scanner debe capturarlo y loggear, no crashear la app.
 - **stream-json no emite JSON en una línea** → ya hay un try/catch en `executor.ts` que lo trata como log plano. No rompas esa tolerancia.
 - **El usuario borra un SKILL.md que está asignado a un agente** → la fila en `AgentSkill` queda huérfana hasta que se limpie. Aceptable por ahora.
-- **Workspace no se limpia al terminar la run** → adrede en runs `succeeded`, para poder inspeccionar el diff. Se limpia al pasar la task a `done`.
+- **Workspace no se limpia al terminar la run** → adrede en runs `succeeded`, para poder inspeccionar el diff. Se limpia al pasar la task a `done` (solo si su trabajo ya está integrado) y, pasados `WORKSPACE_GC_DAYS`, por el GC. El GC nunca borra cambios sin commitear ni copias de runs con la tarea abierta; de un worktree con commits sin integrar borra la carpeta pero conserva la rama.
 
 ## Cuándo preguntar al usuario
 

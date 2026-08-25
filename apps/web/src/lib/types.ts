@@ -269,3 +269,30 @@ export const MODELS = [
   "claude-opus-4-8",
   "claude-sonnet-4-6",
 ] as const;
+
+export type WorkspaceEntrySummary = {
+  runId: string;
+  taskId: string;
+  sizeBytes: number;
+  branchName: string | null;
+  /** "all" borra directorio y rama, "dir" conserva la rama, "keep" no toca. */
+  action: "all" | "dir" | "keep";
+  reason: string;
+};
+
+/** GET /workspaces. `reclaimable` es lo que el GC se llevaría ahora mismo. */
+export type WorkspaceReport = {
+  root: string;
+  olderThanDays: number;
+  total: { count: number; sizeBytes: number };
+  reclaimable: { count: number; sizeBytes: number };
+  entries: WorkspaceEntrySummary[];
+};
+
+export type GcResult = {
+  removed: number;
+  freedBytes: number;
+  /** Cuántos conservaron su rama pese a borrarse el directorio. */
+  keptBranches: number;
+  dryRun: boolean;
+};

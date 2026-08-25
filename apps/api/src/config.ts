@@ -60,4 +60,7 @@ export const config = {
   // Cuántos agentes pueden correr a la vez. Se puede cambiar en caliente desde
   // la UI; esto es solo el valor de arranque.
   queueConcurrency: Math.max(1, Number(process.env.QUEUE_CONCURRENCY ?? 2)),
+  // Edad mínima para que el GC toque un workspace, y cada cuánto barre.
+  workspaceGcDays: Math.max(0, Number(process.env.WORKSPACE_GC_DAYS ?? 7)),
+  workspaceGcIntervalHours: Math.max(0, Number(process.env.WORKSPACE_GC_INTERVAL_HOURS ?? 6)),
 };
