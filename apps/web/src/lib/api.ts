@@ -1,10 +1,13 @@
 import type {
   Agent,
+  BranchStatus,
   ClaudeMd,
   ClaudeMdScope,
+  MergeResult,
   Project,
   QueueStats,
   RunDiff,
+  RunLog,
   RunWithContext,
   Skill,
   SkillContent,
@@ -171,6 +174,23 @@ export const cancelRun = (runId: string) =>
 
 /** Solo existe si el proyecto usa estrategia worktree; con "copy" da 400. */
 export const getRunDiff = (runId: string) => api<RunDiff>(`/runs/${runId}/diff`);
+
+/** Log NDJSON persistido en disco: lo que ya había antes de conectar el SSE. */
+export const getRunLog = (runId: string, tail?: number) =>
+  api<RunLog>(`/runs/${runId}/log${tail ? `?tail=${tail}` : ""}`);
+
+/* ── Integración del trabajo de una run ───────────────────────────────────── */
+
+export const getRunBranch = (runId: string) =>
+  api<BranchStatus>(`/runs/${runId}/branch`);
+
+/** Commitea lo que el agente dejó suelto y mergea la rama en la base. */
+export const mergeRun = (runId: string) =>
+  api<MergeResult>(`/runs/${runId}/merge`, { method: "POST" });
+
+/** Borra worktree y rama. Irreversible: se pierde lo que hizo el agente. */
+export const discardRun = (runId: string) =>
+  api<{ ok: true }>(`/runs/${runId}/discard`, { method: "POST" });
 
 /* ── Stats ──────────────────────────────────────────── */
 

@@ -160,7 +160,32 @@ export type RunEvent =
   | { type: "status"; status: Exclude<RunStatus, "queued"> }
   | { type: "log"; line: string };
 
-export type RunDiff = { branchName: string; diff: string };
+export type RunDiff = { branchName: string; base: string; diff: string };
+
+/** GET /runs/:id/branch. Todo se deriva de git en vivo, no de la BD. */
+export type BranchStatus = {
+  branchName: string | null;
+  /** Rama destino del merge: main, master o la actual del repo. */
+  base: string | null;
+  branchExists: boolean;
+  worktreeExists: boolean;
+  /** El trabajo de la run ya está en la base. */
+  merged: boolean;
+  commits: number;
+  uncommitted: number;
+  canMerge: boolean;
+  blockedReason: string | null;
+};
+
+export type MergeResult = {
+  base: string;
+  branchName: string;
+  /** El cockpit tuvo que commitear lo que el agente dejó suelto. */
+  committed: boolean;
+};
+
+/** GET /runs/:id/log. `lines` son las últimas `tail` líneas del NDJSON. */
+export type RunLog = { lines: string[]; totalLines: number; truncated: boolean };
 
 export type SkillContent = { content: string; filePath: string };
 

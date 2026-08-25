@@ -5,8 +5,8 @@
 Backend completo con estrategia híbrida worktree/copy y compatibilidad Windows.
 Frontend con todas las pantallas del MVP y el dashboard de consumo.
 
-**Pendiente de validar en real:** todavía no se ha ejecutado una run de verdad
-(spawn del CLI → stream-json → SSE → UI). Es lo siguiente que hay que probar.
+El ciclo completo está validado en real: spawn del CLI → stream-json → SSE → UI,
+con tokens y coste registrados, y el trabajo saliendo del worktree al repo.
 
 ## Fase 1 — Frontend MVP ✅
 
@@ -18,12 +18,19 @@ Frontend con todas las pantallas del MVP y el dashboard de consumo.
 6. ✅ **Skills**: catálogo con búsqueda y preview del SKILL.md.
 7. ✅ **CLAUDE.md**: editor Monaco.
 
-## Fase 2 — Review PR-style (a medias)
+## Fase 2 — Review PR-style ✅
 
 Aprovechar los worktrees:
-- ✅ Pestaña "Diff" en el visor de run, contra `GET /runs/:id/diff`.
-- ⬜ Botón "Mergear a main" ejecutando `git merge --no-ff` en el repo.
-- ⬜ Botón "Descartar" (borra worktree y rama).
+- ✅ Pestaña "Diff" en el visor de run, contra `GET /runs/:id/diff`. Diffea el
+  árbol de trabajo, no la rama: Claude Code no hace commit salvo que se lo pidas.
+- ✅ Botón "Mergear en main": commitea lo que el agente dejó suelto y hace
+  `git merge --no-ff`. Exige repo limpio y en la base; si hay conflicto aborta.
+- ✅ Botón "Descartar" (borra worktree y rama, con confirmación).
+- ✅ Pasar la task a `done` solo limpia worktrees ya integrados.
+
+El estado de integración (`GET /runs/:id/branch`) se deriva de git en vivo, no
+de la BD: por eso al mergear se conserva la rama, que es lo que recuerda que esa
+run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Fase 3 — Dashboard de tokens/costes ✅
 

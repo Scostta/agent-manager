@@ -6,6 +6,8 @@ import {
   getAgent,
   getQueueStats,
   getRun,
+  getRunBranch,
+  getRunLog,
   getStats,
   listAgents,
   listClaudeMd,
@@ -30,6 +32,9 @@ export const keys = {
   tasks: (projectId: string) => `/projects/${projectId}/tasks`,
   agent: (id: string) => `/agents/${id}`,
   run: (id: string) => `/runs/${id}`,
+  runLog: (id: string) => `/runs/${id}/log`,
+  runBranch: (id: string) => `/runs/${id}/branch`,
+  runDiff: (id: string) => `/runs/${id}/diff`,
   stats: (days: number) => `/stats/summary?days=${days}`,
 };
 
@@ -55,6 +60,25 @@ export function useClaudeMdDocs() {
 
 export function useRun(id: string | null) {
   return useSWR(id ? keys.run(id) : null, () => getRun(id!));
+}
+
+/**
+ * Estado de la rama de la run: si tiene trabajo, si ya está integrado y si se
+ * puede mergear ahora. Se calcula con git en vivo, así que cambia si el usuario
+ * toca su repo por fuera; por eso revalidamos al volver a la pestaña.
+ */
+export function useRunBranch(runId: string | null) {
+  return useSWR(runId ? keys.runBranch(runId) : null, () => getRunBranch(runId!));
+}
+
+/**
+ * Log NDJSON ya escrito en disco. El SSE solo emite desde que te conectas, así
+ * que sin esto una run terminada (o recargar la página a medias) se veía vacía.
+ */
+export function useRunLog(runId: string | null) {
+  return useSWR(runId ? keys.runLog(runId) : null, () => getRunLog(runId!), {
+    revalidateOnFocus: false,
+  });
 }
 
 export function useStats(days: number) {
@@ -145,13 +169,22 @@ export function useRunStream(runId: string | null) {
         return;
       }
 
+      const pushLine = (line: string): void =>
+        setLines((current) =>
+          current.length >= MAX_LOG_LINES
+            ? [...current.slice(1 - MAX_LOG_LINES), line]
+            : [...current, line],
+        );
+
       switch (parsed.type) {
         case "log":
-          setLines((current) =>
-            current.length >= MAX_LOG_LINES
-              ? [...current.slice(1 - MAX_LOG_LINES), parsed.line]
-              : [...current, parsed.line],
-          );
+          pushLine(parsed.line);
+          break;
+        // El grueso del log son eventos `stream`: el runner solo manda `log`
+        // para stderr y para las líneas que no son JSON. Los reserializamos
+        // igual que están en el NDJSON para que el visor los pinte igual.
+        case "stream":
+          pushLine(JSON.stringify(parsed.data));
           break;
         case "tokens":
           setTokens({
@@ -166,7 +199,6 @@ export function useRunStream(runId: string | null) {
           setStatus(parsed.status);
           break;
         default:
-          // `stream` trae el evento crudo de stream-json; el visor usa `log`.
           break;
       }
     };

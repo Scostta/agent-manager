@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 
@@ -14,12 +14,13 @@ import {
   cn,
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
-import { cancelRun, getRunDiff } from "@/lib/api";
+import { Modal } from "@/components/ui/modal.client";
+import { cancelRun, discardRun, getRunDiff, mergeRun } from "@/lib/api";
 import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
-import { keys, useRun, useRunStream } from "@/lib/hooks";
+import { keys, useRun, useRunBranch, useRunLog, useRunStream } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
-import type { RunStatus } from "@/lib/types";
+import type { BranchStatus, RunStatus } from "@/lib/types";
 
 const STATUS_LABEL = {
   queued: "En cola",
@@ -91,7 +92,17 @@ function logText(line: string): { text: string; error: boolean } {
   }
 }
 
-function RunLog({ lines, active }: { lines: string[]; active: boolean }): ReactElement {
+function RunLog({
+  lines,
+  active,
+  truncated,
+  totalLines,
+}: {
+  lines: string[];
+  active: boolean;
+  truncated?: boolean;
+  totalLines?: number;
+}): ReactElement {
   const boxRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
 
@@ -113,10 +124,15 @@ function RunLog({ lines, active }: { lines: string[]; active: boolean }): ReactE
     >
       {lines.length === 0 ? (
         <p className={cn("font-mono text-xs", active ? "animate-pulse text-txt-3" : "text-txt-3")}>
-          {active ? "Esperando salida del CLI…" : "Esta run no dejó log en vivo."}
+          {active ? "Esperando salida del CLI…" : "Esta run no dejó log."}
         </p>
       ) : (
         <div className="flex flex-col gap-0.5">
+          {truncated && (
+            <p className="pb-1 font-mono text-xs text-txt-3">
+              — mostrando las últimas {lines.length} de {totalLines} líneas —
+            </p>
+          )}
           {lines.map((line, i) => {
             const { text, error } = logText(line);
             return (
@@ -137,8 +153,124 @@ function RunLog({ lines, active }: { lines: string[]; active: boolean }): ReactE
   );
 }
 
+/** "2 commits · 3 sin commitear". Vacío si el agente no dejó nada. */
+function changesLabel(branch: BranchStatus): string {
+  const parts = [];
+  if (branch.commits) parts.push(`${branch.commits} commit${branch.commits > 1 ? "s" : ""}`);
+  if (branch.uncommitted) parts.push(`${branch.uncommitted} sin commitear`);
+  return parts.join(" · ");
+}
+
+/**
+ * Controles para sacar el trabajo del worktree: mergearlo en la base o tirarlo.
+ * Sin esto una run terminada era un callejón sin salida — solo se podía mirar.
+ */
+function IntegrationControls({
+  runId,
+  branch,
+  onChanged,
+}: {
+  runId: string;
+  branch: BranchStatus;
+  onChanged: () => void;
+}): ReactElement | null {
+  const [merging, setMerging] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const toast = useToast();
+
+  if (!branch.branchName) return null;
+
+  const merge = async (): Promise<void> => {
+    setMerging(true);
+    try {
+      const result = await mergeRun(runId);
+      toast(
+        result.committed
+          ? `Integrada en ${result.base} (se commiteó lo que el agente dejó suelto)`
+          : `Integrada en ${result.base}`,
+        "success",
+      );
+      onChanged();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo mergear", "error");
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const discard = async (): Promise<void> => {
+    setDiscarding(true);
+    try {
+      await discardRun(runId);
+      toast("Workspace y rama eliminados", "success");
+      setConfirming(false);
+      onChanged();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo descartar", "error");
+    } finally {
+      setDiscarding(false);
+    }
+  };
+
+  if (branch.merged) {
+    return (
+      <Badge variant="green" size="sm">
+        Integrada en {branch.base}
+      </Badge>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        variant="primary"
+        size="xs"
+        icon="gitBranch"
+        disabled={!branch.canMerge}
+        title={branch.blockedReason ?? undefined}
+        loading={merging}
+        onClick={() => void merge()}
+      >
+        Mergear en {branch.base}
+      </Button>
+      <Button
+        variant="danger"
+        size="xs"
+        icon="trash"
+        disabled={!branch.worktreeExists && !branch.branchExists}
+        onClick={() => setConfirming(true)}
+      >
+        Descartar
+      </Button>
+
+      <Modal
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        title="Descartar el trabajo de esta run"
+        footer={
+          <>
+            <Button variant="danger" loading={discarding} onClick={() => void discard()}>
+              Sí, descartar
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Cancelar
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-txt-2">
+          Se borran el workspace y la rama{" "}
+          <span className="font-mono text-xs text-txt-1">{branch.branchName}</span>. Lo que
+          hizo el agente se pierde y no hay vuelta atrás.
+        </p>
+      </Modal>
+    </>
+  );
+}
+
 function RunDiffPanel({ runId }: { runId: string }): ReactElement {
-  const { data, error, isLoading } = useSWR(`/runs/${runId}/diff`, () => getRunDiff(runId));
+  const { data, error, isLoading } = useSWR(keys.runDiff(runId), () => getRunDiff(runId));
 
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-bg-base px-5 py-4">
@@ -151,13 +283,15 @@ function RunDiffPanel({ runId }: { runId: string }): ReactElement {
         </div>
       )}
 
-      {data && !data.diff.trim() && (
+      {/* SWR conserva el `data` anterior cuando una revalidación falla; tras
+          mergear eso pintaría el diff de un workspace que ya no existe. */}
+      {!error && data && !data.diff.trim() && (
         <p className="font-mono text-xs text-txt-3">
-          La rama {data.branchName} no tiene cambios respecto a la base.
+          La rama {data.branchName} no tiene cambios respecto a {data.base}.
         </p>
       )}
 
-      {data && !!data.diff.trim() && (
+      {!error && data && !!data.diff.trim() && (
         <pre className="font-mono text-xs leading-5">
           {data.diff.split("\n").map((line, i) => (
             <div
@@ -187,7 +321,27 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
   const [cancelling, setCancelling] = useState(false);
 
   const live = run ? run.status === "running" || run.status === "queued" : false;
-  const { lines, tokens, status: streamed } = useRunStream(live ? runId : null);
+  const { lines: streamedLines, tokens, status: streamed } = useRunStream(live ? runId : null);
+  const { data: log } = useRunLog(runId);
+  const { data: branch } = useRunBranch(runId);
+
+  // Merge y descarte cambian el worktree y la rama: lo que muestran el estado
+  // de rama y el diff deja de valer en cuanto uno de los dos termina.
+  const reloadIntegration = (): void => {
+    void mutate(keys.runBranch(runId));
+    void mutate(keys.runDiff(runId));
+    void mutate(keys.run(runId));
+  };
+
+  // El histórico llega del NDJSON en disco y el SSE solo trae lo que pasa desde
+  // que te conectas: concatenamos, descartando el solape de la ventana entre
+  // el fetch y el open del EventSource.
+  const lines = useMemo(() => {
+    const history = log?.lines;
+    if (!history?.length) return streamedLines;
+    const seen = new Set(history);
+    return [...history, ...streamedLines.filter((line) => !seen.has(line))];
+  }, [log, streamedLines]);
 
   const status: RunStatus = streamed ?? run?.status ?? "queued";
   const active = status === "running" || status === "queued";
@@ -197,6 +351,9 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
   useEffect(() => {
     if (streamed && streamed !== "running") {
       void mutate(keys.run(runId));
+      // Al cerrar, el fichero en disco es la versión completa y autoritativa
+      // del log; sustituye a lo que hayamos ido acumulando por SSE.
+      void mutate(keys.runLog(runId));
     }
   }, [streamed, runId, mutate]);
 
@@ -270,6 +427,12 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
                   </span>
                 </>
               )}
+              {branch && !branch.merged && changesLabel(branch) && (
+                <>
+                  <span>·</span>
+                  <span>{changesLabel(branch)}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -279,7 +442,7 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
           <Badge variant={STATUS_BADGE[status]} size="sm">
             {STATUS_LABEL[status]}
           </Badge>
-          {active && (
+          {active ? (
             <Button
               variant="danger"
               size="xs"
@@ -289,9 +452,24 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
             >
               Cancelar
             </Button>
+          ) : (
+            branch && (
+              <IntegrationControls
+                runId={runId}
+                branch={branch}
+                onChanged={reloadIntegration}
+              />
+            )
           )}
         </div>
       </div>
+
+      {!active && branch?.branchName && !branch.merged && branch.blockedReason && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-border-1 bg-warn-dim px-5 py-2 text-xs text-warn">
+          <Icon name="alertCircle" size={12} className="mt-px shrink-0" />
+          <span>{branch.blockedReason}</span>
+        </div>
+      )}
 
       <div className="flex shrink-0 items-center gap-7 border-b border-border-1 bg-bg-2 px-5 py-2.5">
         <Stat label="Input" value={`${formatTokens(inputTokens)} tok`} />
@@ -324,7 +502,12 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
       </div>
 
       {tab === "log" ? (
-        <RunLog lines={lines} active={active} />
+        <RunLog
+          lines={lines}
+          active={active}
+          truncated={log?.truncated}
+          totalLines={log?.totalLines}
+        />
       ) : (
         <RunDiffPanel runId={runId} />
       )}
