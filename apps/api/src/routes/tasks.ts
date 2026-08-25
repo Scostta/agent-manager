@@ -4,6 +4,16 @@ import { db } from "../db.js";
 import { bus } from "../bus.js";
 import { enqueueTaskRun } from "../runner/queue.js";
 import { cleanupIfIntegrated } from "../runner/integrate.js";
+import {
+  DependencyError,
+  blockingDependencies,
+  dependencyView,
+  forgetDependency,
+  parseIdList,
+  syncDependents,
+  syncTaskBlocking,
+  validateDependencies,
+} from "../tasks/sync.js";
 
 const TaskInput = z.object({
   projectId: z.string(),
@@ -19,15 +29,6 @@ const MoveInput = z.object({
   status: z.enum(["todo", "in_progress", "review", "done", "blocked"]),
   position: z.number().int().min(0),
 });
-
-function parseIdList(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 export async function taskRoutes(app: FastifyInstance) {
   app.get("/projects/:projectId/tasks", async (req) => {
@@ -85,8 +86,17 @@ export async function taskRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/tasks", async (req) => {
+  app.post("/tasks", async (req, reply) => {
     const body = TaskInput.parse(req.body);
+
+    let dependsOn: string[];
+    try {
+      dependsOn = await validateDependencies(null, body.projectId, body.dependsOn ?? []);
+    } catch (err) {
+      if (err instanceof DependencyError) return reply.badRequest(err.message);
+      throw err;
+    }
+
     const max = await db.task.aggregate({
       where: { projectId: body.projectId, status: "todo" },
       _max: { position: true },
@@ -98,30 +108,49 @@ export async function taskRoutes(app: FastifyInstance) {
         description: body.description,
         assignedAgentId: body.assignedAgentId ?? null,
         requiredSkillIds: JSON.stringify(body.requiredSkillIds ?? []),
-        dependsOn: JSON.stringify(body.dependsOn ?? []),
+        dependsOn: JSON.stringify(dependsOn),
         priority: body.priority ?? 0,
         position: (max._max.position ?? -1) + 1,
       },
     });
+
+    // Nace bloqueada si depende de algo que aún no está hecho.
+    await syncTaskBlocking(task.id);
     bus.emit("board", { type: "task_created", taskId: task.id });
-    return task;
+    return db.task.findUnique({ where: { id: task.id } });
   });
 
-  app.patch("/tasks/:id", async (req) => {
+  app.patch("/tasks/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
     const body = TaskInput.partial().parse(req.body);
-    const task = await db.task.update({
+
+    const current = await db.task.findUnique({ where: { id } });
+    if (!current) return reply.notFound();
+
+    let dependsOn: string[] | undefined;
+    if (body.dependsOn) {
+      try {
+        dependsOn = await validateDependencies(id, current.projectId, body.dependsOn);
+      } catch (err) {
+        if (err instanceof DependencyError) return reply.badRequest(err.message);
+        throw err;
+      }
+    }
+
+    await db.task.update({
       where: { id },
       data: {
         ...body,
         requiredSkillIds: body.requiredSkillIds
           ? JSON.stringify(body.requiredSkillIds)
           : undefined,
-        dependsOn: body.dependsOn ? JSON.stringify(body.dependsOn) : undefined,
+        dependsOn: dependsOn ? JSON.stringify(dependsOn) : undefined,
       },
     });
+
+    if (dependsOn) await syncTaskBlocking(id);
     bus.emit("board", { type: "task_updated", taskId: id });
-    return task;
+    return db.task.findUnique({ where: { id } });
   });
 
   app.post("/tasks/:id/move", async (req) => {
@@ -149,12 +178,18 @@ export async function taskRoutes(app: FastifyInstance) {
       }
     }
 
+    // Marcar algo como hecho es lo que libera a quienes esperaban por ello.
+    if (status !== previous?.status) await syncDependents(id);
+
     bus.emit("board", { type: "task_updated", taskId: id });
     return task;
   });
 
   app.delete("/tasks/:id", async (req) => {
     const { id } = req.params as { id: string };
+    // Sin esto, sus dependientes quedarían esperando por una tarea que ya no
+    // existe y no habría forma de desbloquearlas desde la UI.
+    await forgetDependency(id);
     await db.task.delete({ where: { id } });
     bus.emit("board", { type: "task_deleted", taskId: id });
     return { ok: true };
@@ -172,8 +207,25 @@ export async function taskRoutes(app: FastifyInstance) {
     const useAgentId = agentId ?? task.assignedAgentId;
     if (!useAgentId) return reply.badRequest("La task no tiene agente asignado");
 
+    // El guard de verdad está aquí: da igual en qué columna la haya puesto el
+    // usuario, no se lanza nada mientras falten dependencias.
+    const blocking = await blockingDependencies(id);
+    if (blocking.length > 0) {
+      const pending = await dependencyView(blocking);
+      const names = pending.map((dep) => dep.title ?? dep.id).join(", ");
+      return reply.badRequest(`Esta tarea depende de: ${names}. Termínalas antes de lanzarla.`);
+    }
+
     const runId = await enqueueTaskRun(id, useAgentId);
     return { runId };
+  });
+
+  /** Estado de las dependencias de una tarea, para explicar el bloqueo. */
+  app.get("/tasks/:id/dependencies", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const task = await db.task.findUnique({ where: { id }, select: { dependsOn: true } });
+    if (!task) return reply.notFound();
+    return { dependencies: await dependencyView(parseIdList(task.dependsOn)) };
   });
 
 }

@@ -296,3 +296,17 @@ export type GcResult = {
   keptBranches: number;
   dryRun: boolean;
 };
+
+/** GET /tasks/:id/dependencies. `status: null` = la tarea ya no existe. */
+export type TaskDependency = {
+  id: string;
+  title: string | null;
+  status: TaskStatus | null;
+  /** Cumplida: en Hecho, o borrada (una tarea que no existe no bloquea). */
+  done: boolean;
+};
+
+/** Las que impiden lanzar. Una lista vacía significa vía libre. */
+export function blockingOf(deps: TaskDependency[]): TaskDependency[] {
+  return deps.filter((dep) => !dep.done);
+}

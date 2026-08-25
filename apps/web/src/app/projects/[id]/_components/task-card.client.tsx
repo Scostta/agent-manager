@@ -56,6 +56,15 @@ export function TaskCardBody({
         <span className="flex-1 text-sm font-medium leading-snug text-txt-1">
           {task.title}
         </span>
+        {task.dependsOn.length > 0 && (
+          <span
+            className="mt-px flex shrink-0 items-center gap-0.5 text-2xs text-txt-3"
+            title={`Depende de ${task.dependsOn.length} tarea(s)`}
+          >
+            <Icon name="layers" size={9} />
+            {task.dependsOn.length}
+          </span>
+        )}
       </div>
 
       {active && run && (

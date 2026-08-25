@@ -410,6 +410,13 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
               await refresh();
             })
           }
+          siblings={board.filter((candidate) => candidate.id !== selected.id)}
+          onDependenciesChange={(dependsOn) =>
+            void withBusy(async () => {
+              await updateTask(selected.id, { dependsOn });
+              await refresh();
+            })
+          }
           onDelete={() =>
             void withBusy(async () => {
               await deleteTask(selected.id);
