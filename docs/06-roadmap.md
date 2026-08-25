@@ -40,12 +40,27 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 - `GET /projects/:id/tasks` devuelve `totals` por task (suma de todas sus runs),
   que es lo que pintan la tarjeta del kanban y el drawer.
 
-## Fase 4 — Refinamientos
+## Fase 4 — Refinamientos ✅
 
-- Dependencias entre tasks (`dependsOn`) enforzadas.
-- GC programado de worktrees viejos por edad.
-- Kill switch global.
-- Templates de proyecto.
+- ✅ **Dependencias entre tasks enforzadas.** Cumplida = la tarea está en `done`
+  (en `review` el trabajo aún no está revisado ni integrado). El cockpit pone y
+  quita `blocked` solo; al cumplirse la última dependencia la tarea pasa a
+  `todo` y espera, no se lanza sola. Una dependencia borrada deja de contar; los
+  ciclos se rechazan al guardar.
+- ✅ **GC de workspaces por edad**, con la regla de no borrar nunca trabajo que
+  no esté guardado en otro sitio.
+- ✅ **Control de la cola**: concurrencia en caliente, pausa y kill switch.
+- ✅ **Historial de runs** con filtros y reintentos visibles.
+- ✅ **Suscripción por defecto** + aviso de cuota agotada con opción de esperar
+  al reset o tirar de la API key.
+- ⬜ Templates de proyecto.
+
+## Lo que falta por probar
+
+Los tests cubren la lógica pura (`node:test`, sin dependencias nuevas). Sigue
+sin cubrirse lo que necesita BD o spawnear procesos — scanner de skills,
+executor y rutas —, que es justo donde salieron el bug del glob de chokidar y el
+del handler de spawn. Requiere montar una SQLite temporal por test.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

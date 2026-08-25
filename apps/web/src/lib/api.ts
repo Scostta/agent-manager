@@ -20,6 +20,7 @@ import type {
   WorkspaceReport,
   GcResult,
   Task,
+  TaskDependency,
   TaskStatus,
 } from "@/lib/types";
 
@@ -156,6 +157,7 @@ export const updateTask = (
     description?: string;
     assignedAgentId?: string | null;
     requiredSkillIds?: string[];
+    dependsOn?: string[];
     priority?: number;
   },
 ) => api<Task>(`/tasks/${id}`, { method: "PATCH", ...json(input) });
@@ -256,3 +258,6 @@ export const getWorkspaceReport = (days?: number) =>
 /** Con dryRun devuelve lo que se llevaría sin tocar el disco. */
 export const collectWorkspaces = (options: { days?: number; dryRun?: boolean } = {}) =>
   api<GcResult>("/workspaces/gc", { method: "POST", ...json(options) });
+
+export const getTaskDependencies = (taskId: string) =>
+  api<{ dependencies: TaskDependency[] }>(`/tasks/${taskId}/dependencies`);

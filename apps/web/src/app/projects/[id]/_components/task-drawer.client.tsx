@@ -78,6 +78,8 @@ export function TaskDrawer({
   onCancel,
   onMove,
   onAssign,
+  onDependenciesChange,
+  siblings,
   onDelete,
 }: {
   task: Task;
@@ -89,6 +91,9 @@ export function TaskDrawer({
   onCancel: (runId: string) => void;
   onMove: (status: Task["status"]) => void;
   onAssign: (agentId: string | null) => void;
+  onDependenciesChange: (dependsOn: string[]) => void;
+  /** Las demás tareas del proyecto, para elegir de cuáles depende. */
+  siblings: Task[];
   onDelete: () => void;
 }): ReactElement {
   const run = latestRun(task);
@@ -98,6 +103,10 @@ export function TaskDrawer({
   const { data: history } = useRuns(task.totals.runs > 1 ? { taskId: task.id } : null);
   const previous =
     task.totals.runs > 1 ? (history?.runs ?? []).filter((item) => item.id !== run?.id) : [];
+  // Una dependencia borrada no bloquea: si no está en la lista, está resuelta.
+  const blocking = task.dependsOn
+    .map((id) => siblings.find((candidate) => candidate.id === id))
+    .filter((dep): dep is Task => !!dep && dep.status !== "done");
   const taskSkills = skills.filter((s) => task.requiredSkillIds.includes(s.id));
   const [agentId, setAgentId] = useState(task.assignedAgentId ?? "");
   const [elapsed, setElapsed] = useState(0);
@@ -183,6 +192,45 @@ export function TaskDrawer({
             </div>
           </>
         )}
+
+        <Divider label="Depende de" />
+        <div className="my-3 flex flex-col gap-1.5">
+          {siblings.length === 0 ? (
+            <span className="text-xs text-txt-3">
+              No hay otras tareas en este proyecto de las que depender.
+            </span>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-1.5">
+                {siblings.map((sibling) => {
+                  const selected = task.dependsOn.includes(sibling.id);
+                  return (
+                    <Chip
+                      key={sibling.id}
+                      active={selected}
+                      onClick={() =>
+                        onDependenciesChange(
+                          selected
+                            ? task.dependsOn.filter((id) => id !== sibling.id)
+                            : [...task.dependsOn, sibling.id],
+                        )
+                      }
+                    >
+                      {sibling.status === "done" && <Icon name="check" size={9} />}
+                      {sibling.title}
+                    </Chip>
+                  );
+                })}
+              </div>
+              {blocking.length > 0 && (
+                <span className="text-2xs text-warn">
+                  Bloqueada hasta que {blocking.length === 1 ? "termine" : "terminen"}:{" "}
+                  {blocking.map((dep) => dep.title ?? dep.id).join(", ")}
+                </span>
+              )}
+            </>
+          )}
+        </div>
 
         {task.totals.runs > 0 && (
           <>
@@ -346,10 +394,19 @@ export function TaskDrawer({
             icon="play"
             className="flex-1"
             loading={busy}
-            disabled={!agentId}
+            disabled={!agentId || blocking.length > 0}
+            title={
+              blocking.length > 0
+                ? `Falta terminar: ${blocking.map((dep) => dep.title).join(", ")}`
+                : undefined
+            }
             onClick={() => agentId && onRun(agentId)}
           >
-            {agentId ? "Ejecutar ahora" : "Asigna un agente"}
+            {blocking.length > 0
+              ? `Bloqueada por ${blocking.length}`
+              : agentId
+                ? "Ejecutar ahora"
+                : "Asigna un agente"}
           </Button>
         )}
       </div>
