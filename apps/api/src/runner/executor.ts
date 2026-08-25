@@ -14,6 +14,7 @@ import {
   cleanupWorkspace,
 } from "./workspace.js";
 import { killProcessTree, spawnOptions } from "../lib/process.js";
+import { describeRateLimit, detectRateLimit, type RateLimitHit } from "./rateLimit.js";
 
 const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
 
@@ -82,7 +83,28 @@ function totalsFromResult(event: any): TokenCounts | null {
   return null;
 }
 
-export async function executeTaskRun(runId: string): Promise<void> {
+export type AuthMode = "subscription" | "api_key";
+
+/**
+ * Una ANTHROPIC_API_KEY presente en el entorno tiene precedencia sobre el login
+ * de claude.ai, así que para consumir del plan hay que borrarla del entorno del
+ * hijo — heredarla sin más factura por API sin decir nada.
+ */
+function childEnv(mode: AuthMode): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  if (mode === "api_key") {
+    env.ANTHROPIC_API_KEY = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;
+    return env;
+  }
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  return env;
+}
+
+export async function executeTaskRun(
+  runId: string,
+  authMode: AuthMode = config.authMode,
+): Promise<void> {
   const run = await db.taskRun.findUnique({
     where: { id: runId },
     include: {
@@ -137,15 +159,24 @@ export async function executeTaskRun(runId: string): Promise<void> {
 
   const child = spawn(config.claudeCli, args, {
     cwd: workspacePath,
-    env: {
-      ...process.env,
-      ANTHROPIC_API_KEY: config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY,
-    },
+    env: childEnv(authMode),
     ...spawnOptions(),
   });
 
+  // Node emite 'error' (ENOENT del binario, permisos…) en el tick siguiente al
+  // spawn. Cualquier await entre medias deja el evento sin escuchar y eso tumba
+  // el proceso entero, no solo la run. Lo enganchamos aquí y lo reproducimos
+  // luego, cuando el manejador de verdad está montado.
+  let earlySpawnError: Error | null = null;
+  let onSpawnError = (err: Error): void => {
+    earlySpawnError = err;
+  };
+  child.on("error", (err) => onSpawnError(err));
+
   activeProcesses.set(runId, child);
-  await db.taskRun.update({ where: { id: runId }, data: { pid: child.pid ?? null } });
+  await db.taskRun
+    .update({ where: { id: runId }, data: { pid: child.pid ?? null } })
+    .catch(() => {});
 
   // El guard de presupuesto solo salta si el agente tiene budget y si siguen
   // llegando eventos de tokens; una run que se queda muda no la para nadie.
@@ -173,6 +204,10 @@ export async function executeTaskRun(runId: string): Promise<void> {
   let resultCostUsd: number | null = null;
   let resultSummary: string | null = null;
   let resultIsError = false;
+  let rateLimit: RateLimitHit | null = null;
+  // El aviso de cuota agotada a veces llega por stderr y no por el evento
+  // `result`, así que guardamos lo último que escupió.
+  let stderrBuffer = "";
 
   function currentTotals(): TokenCounts {
     if (resultTotals) return resultTotals;
@@ -245,6 +280,7 @@ export async function executeTaskRun(runId: string): Promise<void> {
       if (typeof event.result === "string") {
         resultSummary = event.result.slice(0, MAX_SUMMARY_CHARS);
       }
+      rateLimit = detectRateLimit(event, stderrBuffer);
     } else if (event.type === "assistant" && event.message?.usage) {
       const messageId = event.message.id;
       // Sin id no podemos deduplicar; ignoramos antes que inflar el contador.
@@ -277,6 +313,7 @@ export async function executeTaskRun(runId: string): Promise<void> {
 
   child.stderr.on("data", (chunk) => {
     const text = chunk.toString();
+    stderrBuffer = `${stderrBuffer}${text}`.slice(-4000);
     logStream.write(`[stderr] ${text}\n`);
     bus.emit(`run:${runId}`, { type: "log", line: text });
   });
@@ -310,17 +347,30 @@ export async function executeTaskRun(runId: string): Promise<void> {
             ? "succeeded"
             : "failed";
 
+      // Quedarse sin cuota del plan no es un fallo de la tarea: la run se marca
+      // aparte para que la UI pueda ofrecer esperar al reset o tirar de la key.
+      const hitLimit =
+        finalStatus === "failed" && !wasTimeout && rateLimit ? rateLimit : null;
+
       const updated = await db.taskRun.update({
         where: { id: runId },
         data: {
           status: finalStatus,
           endedAt: new Date(),
           pid: null,
+          failureKind: hitLimit ? "rate_limit" : finalStatus === "failed" ? "error" : null,
+          rateLimitResetAt: hitLimit ? hitLimit.resetsAt : null,
           resultSummary: wasTimeout
             ? `Run abortada por timeout tras ${Math.round(config.runTimeoutMs / 60_000)} min.`
-            : resultSummary,
+            : hitLimit
+              ? describeRateLimit(hitLimit)
+              : resultSummary,
         },
       });
+
+      if (hitLimit) {
+        console.warn(`[runner] run ${runId} cortada por cuota: ${describeRateLimit(hitLimit)}`);
+      }
 
       await settleTaskStatus(task.id, finalStatus);
 
@@ -343,7 +393,7 @@ export async function executeTaskRun(runId: string): Promise<void> {
       void finish();
     });
 
-    child.on("error", async (err) => {
+    async function handleSpawnError(err: Error): Promise<void> {
       if (finished) return;
       finished = true;
 
@@ -368,6 +418,7 @@ export async function executeTaskRun(runId: string): Promise<void> {
           status: "failed",
           endedAt: new Date(),
           resultSummary: summary,
+          failureKind: "error",
           pid: null,
         },
       });
@@ -377,7 +428,11 @@ export async function executeTaskRun(runId: string): Promise<void> {
       bus.emit(`run:${runId}`, { type: "status", status: "failed" });
       bus.emit("board", { type: "task_updated", taskId: task.id });
       resolve();
-    });
+    }
+
+    onSpawnError = (err) => void handleSpawnError(err);
+    // Si el spawn ya falló mientras montábamos todo esto, lo procesamos ahora.
+    if (earlySpawnError) onSpawnError(earlySpawnError);
   });
 }
 

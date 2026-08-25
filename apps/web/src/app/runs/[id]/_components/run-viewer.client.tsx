@@ -15,12 +15,14 @@ import {
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
 import { Modal } from "@/components/ui/modal.client";
-import { cancelRun, discardRun, getRunDiff, mergeRun } from "@/lib/api";
-import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
+import { cancelRun, discardRun, getRunDiff, mergeRun, retryRun } from "@/lib/api";
+import { formatClock, formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
 import { keys, useRun, useRunBranch, useRunLog, useRunStream } from "@/lib/hooks";
 
+import { isRateLimited } from "@/lib/types";
+
 import type { ReactElement } from "react";
-import type { BranchStatus, RunStatus } from "@/lib/types";
+import type { BranchStatus, RetryMode, RunStatus, RunWithContext } from "@/lib/types";
 
 const STATUS_LABEL = {
   queued: "En cola",
@@ -70,26 +72,92 @@ function Stat({
   );
 }
 
-/** El CLI escupe NDJSON; si la línea es JSON mostramos lo legible, si no, crudo. */
-function logText(line: string): { text: string; error: boolean } {
-  try {
-    const parsed = JSON.parse(line) as {
-      type?: string;
-      subtype?: string;
-      content?: string;
-      message?: { content?: { type: string; text?: string }[] };
-      result?: string;
-      is_error?: boolean;
-    };
-    const fromMessage = parsed.message?.content
-      ?.filter((block) => block.type === "text" && block.text)
-      .map((block) => block.text)
+type LogTone = "text" | "thinking" | "tool" | "result" | "error";
+
+const TONE_CLASS: Record<LogTone, string> = {
+  text: "text-txt-2",
+  thinking: "text-txt-3 italic",
+  tool: "text-info",
+  result: "text-txt-3",
+  error: "text-danger",
+};
+
+const MAX_TOOL_RESULT_CHARS = 500;
+
+/** "Bash · node --test": el nombre de la herramienta y su argumento principal. */
+function toolSummary(block: { name?: string; input?: Record<string, unknown> }): string {
+  const input = block.input ?? {};
+  const detail =
+    input.command ?? input.file_path ?? input.path ?? input.pattern ?? input.description;
+  const firstLine = typeof detail === "string" ? detail.split("\n")[0].slice(0, 160) : "";
+  return firstLine ? `${block.name} · ${firstLine}` : String(block.name ?? "herramienta");
+}
+
+function toolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part: any) => (typeof part === "string" ? part : (part?.text ?? "")))
       .join("\n");
-    const text = fromMessage || parsed.content || parsed.result || line;
-    return { text, error: parsed.is_error === true || parsed.subtype === "error" };
-  } catch {
-    return { text: line, error: /error|failed|exception/i.test(line) };
   }
+  return "";
+}
+
+/**
+ * El NDJSON del CLI trae mucho ruido de protocolo (firmas de thinking, usage,
+ * uuids) que enseñado en crudo hace el log ilegible. Traducimos cada evento a
+ * una línea legible y devolvemos null para lo que no aporta nada.
+ */
+function formatLogLine(line: string): { text: string; tone: LogTone } | null {
+  let event: any;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    // stderr y cualquier salida que no sea JSON se muestran tal cual.
+    return { text: line, tone: /error|failed|exception/i.test(line) ? "error" : "text" };
+  }
+
+  if (event.type === "assistant") {
+    const parts: { text: string; tone: LogTone }[] = [];
+    for (const block of event.message?.content ?? []) {
+      if (block.type === "text" && block.text?.trim()) {
+        parts.push({ text: block.text.trim(), tone: "text" });
+      } else if (block.type === "thinking" && block.thinking?.trim()) {
+        parts.push({ text: block.thinking.trim(), tone: "thinking" });
+      } else if (block.type === "tool_use") {
+        parts.push({ text: `→ ${toolSummary(block)}`, tone: "tool" });
+      }
+    }
+    if (parts.length === 0) return null;
+    return {
+      text: parts.map((p) => p.text).join("\n"),
+      tone: parts.some((p) => p.tone === "tool") ? "tool" : parts[0].tone,
+    };
+  }
+
+  if (event.type === "user") {
+    const block = (event.message?.content ?? []).find(
+      (b: any) => b.type === "tool_result",
+    );
+    if (!block) return null;
+    const text = toolResultText(block.content).trim();
+    if (!text) return null;
+    return {
+      text: `← ${text.slice(0, MAX_TOOL_RESULT_CHARS)}${text.length > MAX_TOOL_RESULT_CHARS ? "…" : ""}`,
+      tone: block.is_error ? "error" : "result",
+    };
+  }
+
+  if (event.type === "result") {
+    const failed = event.is_error === true || event.subtype !== "success";
+    return {
+      text: typeof event.result === "string" ? event.result : failed ? "La run falló" : "Fin",
+      tone: failed ? "error" : "text",
+    };
+  }
+
+  // `system` (init, thinking_tokens…) es puro protocolo.
+  return null;
 }
 
 function RunLog({
@@ -134,16 +202,17 @@ function RunLog({
             </p>
           )}
           {lines.map((line, i) => {
-            const { text, error } = logText(line);
+            const entry = formatLogLine(line);
+            if (!entry) return null;
             return (
               <p
                 key={i}
                 className={cn(
                   "whitespace-pre-wrap break-words font-mono text-xs leading-5",
-                  error ? "text-danger" : "text-txt-2",
+                  TONE_CLASS[entry.tone],
                 )}
               >
-                {text}
+                {entry.text}
               </p>
             );
           })}
@@ -266,6 +335,93 @@ function IntegrationControls({
         </p>
       </Modal>
     </>
+  );
+}
+
+/**
+ * Una run cortada por falta de cuota no es un fallo de la tarea: o esperas a
+ * que el plan se reponga, o la relanzas pagando por API. Lo decide el usuario.
+ */
+function RateLimitBanner({
+  run,
+  onResolved,
+}: {
+  run: RunWithContext;
+  onResolved: () => void;
+}): ReactElement | null {
+  const [busy, setBusy] = useState<RetryMode | null>(null);
+  const toast = useToast();
+
+  if (!isRateLimited(run)) return null;
+
+  const waiting = run.failureKind === "rate_limit_waiting";
+  const resetAt = run.rateLimitResetAt;
+
+  const act = async (mode: RetryMode): Promise<void> => {
+    setBusy(mode);
+    try {
+      const result = await retryRun(run.id, mode);
+      toast(
+        result.scheduledFor
+          ? `Reintento programado para ${formatClock(result.scheduledFor)}`
+          : mode === "api_key"
+            ? "Relanzada con la API key (se factura aparte del plan)"
+            : "Relanzada",
+        "success",
+      );
+      onResolved();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo reintentar", "error");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border-1 bg-warn-dim px-5 py-2.5 text-sm text-warn">
+      <Icon name="clock" size={13} className="shrink-0" />
+      <span className="min-w-0 flex-1">
+        {run.resultSummary ?? "Se agotó tu cuota del plan de Claude Code."}
+        {waiting && resetAt && (
+          <span className="text-txt-2"> · reintentando sola a las {formatClock(resetAt)}</span>
+        )}
+      </span>
+
+      {waiting ? (
+        <Button
+          variant="subtle"
+          size="xs"
+          icon="play"
+          loading={busy === "api_key"}
+          onClick={() => void act("api_key")}
+        >
+          Mejor tirar de la API key
+        </Button>
+      ) : (
+        <>
+          <Button
+            variant="default"
+            size="xs"
+            icon="clock"
+            disabled={!resetAt}
+            title={resetAt ? undefined : "El CLI no dijo cuándo se repone la cuota"}
+            loading={busy === "wait"}
+            onClick={() => void act("wait")}
+          >
+            {resetAt ? `Esperar a las ${formatClock(resetAt)}` : "Esperar al reset"}
+          </Button>
+          <Button
+            variant="primary"
+            size="xs"
+            icon="play"
+            loading={busy === "api_key"}
+            onClick={() => void act("api_key")}
+          >
+            Usar la API key
+          </Button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -464,6 +620,8 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
         </div>
       </div>
 
+      <RateLimitBanner run={run} onResolved={() => { void mutate(keys.run(runId)); void mutate(keys.plan); }} />
+
       {!active && branch?.branchName && !branch.merged && branch.blockedReason && (
         <div className="flex shrink-0 items-start gap-2 border-b border-border-1 bg-warn-dim px-5 py-2 text-xs text-warn">
           <Icon name="alertCircle" size={12} className="mt-px shrink-0" />
@@ -512,8 +670,10 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
         <RunDiffPanel runId={runId} />
       )}
 
+      {/* El resumen del agente puede ser larguísimo; sin tope se comía el log
+          y el diff, que son lo que se viene a mirar. */}
       {!active && run.resultSummary && (
-        <div className="shrink-0 border-t border-border-1 bg-bg-2 px-5 py-3">
+        <div className="max-h-[30%] shrink-0 overflow-y-auto border-t border-border-1 bg-bg-2 px-5 py-3">
           <div className="text-2xs uppercase tracking-[.06em] text-txt-3">Resumen</div>
           <p className="mt-1 whitespace-pre-wrap text-sm text-txt-2">{run.resultSummary}</p>
         </div>

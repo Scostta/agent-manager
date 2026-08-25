@@ -5,7 +5,8 @@ import { z } from "zod";
 
 import { db } from "../db.js";
 import { config } from "../config.js";
-import { cancelRun } from "../runner/queue.js";
+import { cancelRun, enqueueTaskRun } from "../runner/queue.js";
+import { cancelRetry, scheduleRetryAtReset } from "../runner/scheduler.js";
 import {
   IntegrationError,
   discardRun,
@@ -14,13 +15,62 @@ import {
   mergeRun,
 } from "../runner/integrate.js";
 
+const RetryInput = z.object({
+  mode: z.enum(["wait", "api_key", "now"]),
+});
+
 /** El visor solo pinta la cola del log; leer entero un NDJSON de una run larga
  *  es pura memoria tirada. */
 const LogQuery = z.object({
   tail: z.coerce.number().int().min(1).max(20_000).default(2000),
 });
 
+const RunsQuery = z.object({
+  projectId: z.string().optional(),
+  taskId: z.string().optional(),
+  agentId: z.string().optional(),
+  status: z
+    .enum(["queued", "running", "succeeded", "failed", "cancelled"])
+    .optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
 export async function runRoutes(app: FastifyInstance) {
+  /**
+   * Historial de runs. Hasta ahora solo se podía llegar a la última run de cada
+   * task (`listTasks` hace take: 1), así que los reintentos y su gasto eran
+   * invisibles pese a estar en la BD.
+   */
+  app.get("/runs", async (req) => {
+    const { projectId, taskId, agentId, status, limit, offset } = RunsQuery.parse(
+      req.query ?? {},
+    );
+
+    const where = {
+      ...(taskId ? { taskId } : {}),
+      ...(agentId ? { agentId } : {}),
+      ...(status ? { status } : {}),
+      ...(projectId ? { task: { projectId } } : {}),
+    };
+
+    const [runs, total] = await Promise.all([
+      db.taskRun.findMany({
+        where,
+        include: {
+          task: { select: { id: true, title: true, projectId: true } },
+          agent: { select: { id: true, name: true, model: true } },
+        },
+        orderBy: { startedAt: "desc" },
+        take: limit,
+        skip: offset,
+      }),
+      db.taskRun.count({ where }),
+    ]);
+
+    return { runs, total, limit, offset };
+  });
+
   app.get("/runs/:runId", async (req, reply) => {
     const { runId } = req.params as { runId: string };
     const run = await db.taskRun.findUnique({
@@ -76,6 +126,40 @@ export async function runRoutes(app: FastifyInstance) {
       if (err instanceof IntegrationError) return reply.badRequest(err.message);
       return reply.internalServerError(`Error obteniendo diff: ${err.message}`);
     }
+  });
+
+  /**
+   * Qué hacer con una run que se quedó sin cuota del plan: esperar al reset y
+   * que se reintente sola, o relanzarla ya tirando de la API key (que se
+   * factura aparte).
+   */
+  app.post("/runs/:runId/retry", async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const { mode } = RetryInput.parse(req.body ?? {});
+
+    const run = await db.taskRun.findUnique({ where: { id: runId } });
+    if (!run) return reply.notFound();
+
+    if (mode === "wait") {
+      try {
+        const resetAt = await scheduleRetryAtReset(runId);
+        return { mode, scheduledFor: resetAt.toISOString() };
+      } catch (err: any) {
+        return reply.badRequest(err.message);
+      }
+    }
+
+    cancelRetry(runId);
+    await db.taskRun.update({
+      where: { id: runId },
+      data: { failureKind: "rate_limit" },
+    });
+    const newRunId = await enqueueTaskRun(
+      run.taskId,
+      run.agentId,
+      mode === "api_key" ? "api_key" : undefined,
+    );
+    return { mode, runId: newRunId };
   });
 
   /* ── Integración del trabajo de la run ──────────────────────────────────── */

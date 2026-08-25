@@ -72,28 +72,70 @@ async function upsertSkillFromFile(filePath: string): Promise<void> {
 
 export async function scanSkills(): Promise<number> {
   let count = 0;
+  const seen: string[] = [];
+
   for (const root of config.skillsPaths) {
     const files = await findSkillFiles(root);
     for (const file of files) {
       try {
         await upsertSkillFromFile(file);
+        seen.push(file);
         count++;
       } catch (err) {
         console.warn(`[skills] Error procesando ${file}:`, err);
       }
     }
   }
+
+  // Sin esto, un SKILL.md borrado mientras la API estaba parada se quedaba
+  // indexado para siempre: el escaneo solo daba de alta.
+  const removed = await db.skill.deleteMany({ where: { filePath: { notIn: seen } } });
+  if (removed.count > 0) {
+    console.info(`[skills] ${removed.count} skill(s) ya no están en disco: eliminadas`);
+  }
+
   return count;
 }
 
+function isSkillFile(filePath: string): boolean {
+  return path.basename(filePath) === "SKILL.md";
+}
+
+/**
+ * chokidar 4 dejó de aceptar globs: pasarle `<root>/**\/SKILL.md` no vigilaba
+ * nada y los cambios en disco no se reindexaban nunca. Vigilamos los
+ * directorios raíz y filtramos por nombre.
+ */
 export function watchSkills(): void {
-  const watcher = chokidar.watch(
-    config.skillsPaths.map((p) => path.join(p, "**/SKILL.md")),
-    { ignoreInitial: true },
-  );
-  watcher.on("add", (p) => upsertSkillFromFile(p).catch(console.error));
-  watcher.on("change", (p) => upsertSkillFromFile(p).catch(console.error));
-  watcher.on("unlink", async (p) => {
-    await db.skill.deleteMany({ where: { filePath: p } });
+  const watcher = chokidar.watch(config.skillsPaths, {
+    ignoreInitial: true,
+    // Los directorios tienen que pasar el filtro o no se recorrerían.
+    ignored: (target, stats) => !!stats?.isFile() && !isSkillFile(target),
   });
+
+  const reindex = (p: string): void => {
+    if (!isSkillFile(p)) return;
+    upsertSkillFromFile(p).catch((err) =>
+      console.warn(`[skills] error reindexando ${p}:`, err),
+    );
+  };
+
+  const forget = async (filePath: string): Promise<void> => {
+    const removed = await db.skill.deleteMany({ where: { filePath } });
+    if (removed.count > 0) console.info(`[skills] eliminada ${filePath}`);
+  };
+
+  watcher.on("add", reindex);
+  watcher.on("change", reindex);
+  watcher.on("unlink", (p) => {
+    if (!isSkillFile(p)) return;
+    forget(p).catch((err) => console.warn(`[skills] error borrando ${p}:`, err));
+  });
+  // Borrar la carpeta de una skill emite unlinkDir, no unlink del fichero.
+  watcher.on("unlinkDir", (dir) => {
+    forget(path.join(dir, "SKILL.md")).catch((err) =>
+      console.warn(`[skills] error borrando ${dir}:`, err),
+    );
+  });
+  watcher.on("error", (err) => console.warn("[skills] watcher:", err));
 }

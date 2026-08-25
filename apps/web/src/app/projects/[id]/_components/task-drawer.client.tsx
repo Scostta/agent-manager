@@ -16,10 +16,11 @@ import {
   cn,
 } from "@/components/ui/primitives.client";
 import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
+import { useRuns } from "@/lib/hooks";
 import { isActiveRun, latestRun } from "@/lib/types";
 
 import type { ReactElement } from "react";
-import type { Agent, Skill, Task } from "@/lib/types";
+import type { Agent, RunListItem, Skill, Task } from "@/lib/types";
 
 const STATUS_BADGE = {
   todo: "default",
@@ -35,6 +36,35 @@ function RunMetrics({ label, value }: { label: string; value: string }): ReactEl
       <div className="text-2xs text-txt-3">{label}</div>
       <div className="font-mono text-sm font-semibold text-txt-1">{value}</div>
     </div>
+  );
+}
+
+const PREVIOUS_ICON = {
+  succeeded: { name: "check", color: "text-ok" },
+  failed: { name: "x", color: "text-danger" },
+  cancelled: { name: "stop", color: "text-txt-3" },
+  running: { name: "refresh", color: "text-info" },
+  queued: { name: "clock", color: "text-txt-3" },
+} as const;
+
+/** Fila compacta de un reintento anterior. La run más reciente se pinta aparte,
+ *  con todo el detalle. */
+function PreviousRun({ run }: { run: RunListItem }): ReactElement {
+  const icon = PREVIOUS_ICON[run.status];
+  return (
+    <Link
+      href={`/runs/${run.id}`}
+      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-bg-hover"
+    >
+      <Icon name={icon.name} size={11} className={cn("shrink-0", icon.color)} />
+      <span className="text-txt-3">{formatRelative(run.endedAt ?? run.startedAt)}</span>
+      <span className="ml-auto tabular-nums text-txt-3">
+        {formatTokens(run.inputTokens + run.outputTokens)} tok
+      </span>
+      <span className="w-14 text-right tabular-nums text-txt-2">
+        {formatCost(run.costUsd)}
+      </span>
+    </Link>
   );
 }
 
@@ -63,6 +93,11 @@ export function TaskDrawer({
 }): ReactElement {
   const run = latestRun(task);
   const active = isActiveRun(run);
+  // El board solo trae la run más reciente de cada task; los reintentos hay que
+  // pedirlos aparte. Solo merece la pena si la task tiene más de una.
+  const { data: history } = useRuns(task.totals.runs > 1 ? { taskId: task.id } : null);
+  const previous =
+    task.totals.runs > 1 ? (history?.runs ?? []).filter((item) => item.id !== run?.id) : [];
   const taskSkills = skills.filter((s) => task.requiredSkillIds.includes(s.id));
   const [agentId, setAgentId] = useState(task.assignedAgentId ?? "");
   const [elapsed, setElapsed] = useState(0);
@@ -249,6 +284,17 @@ export function TaskDrawer({
             </div>
           )}
         </div>
+
+        {previous.length > 0 && (
+          <div className="mt-5">
+            <Divider label={`${previous.length} intento${previous.length > 1 ? "s" : ""} anterior${previous.length > 1 ? "es" : ""}`} />
+            <div className="mt-2 flex flex-col">
+              {previous.map((item) => (
+                <PreviousRun key={item.id} run={item} />
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mt-5">
           <Divider label="Mover a" />

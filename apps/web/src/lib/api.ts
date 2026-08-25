@@ -4,10 +4,14 @@ import type {
   ClaudeMd,
   ClaudeMdScope,
   MergeResult,
+  PlanUsage,
   Project,
   QueueStats,
   RunDiff,
+  RunList,
+  RetryMode,
   RunLog,
+  RunStatus,
   RunWithContext,
   Skill,
   SkillContent,
@@ -169,6 +173,25 @@ export const runTask = (taskId: string, agentId?: string) =>
 
 export const getRun = (runId: string) => api<RunWithContext>(`/runs/${runId}`);
 
+export type RunFilters = {
+  projectId?: string;
+  taskId?: string;
+  agentId?: string;
+  status?: RunStatus;
+  limit?: number;
+  offset?: number;
+};
+
+/** Historial de runs. Sin filtros devuelve las últimas 50 de todo el cockpit. */
+export const listRuns = (filters: RunFilters = {}) => {
+  const query = new URLSearchParams(
+    Object.entries(filters)
+      .filter(([, value]) => value !== undefined && value !== "")
+      .map(([key, value]) => [key, String(value)]),
+  ).toString();
+  return api<RunList>(`/runs${query ? `?${query}` : ""}`);
+};
+
 export const cancelRun = (runId: string) =>
   api<{ ok: boolean }>(`/runs/${runId}/cancel`, { method: "POST" });
 
@@ -195,6 +218,16 @@ export const discardRun = (runId: string) =>
 /* ── Stats ──────────────────────────────────────────── */
 
 export const getStats = (days: number) => api<StatsSummary>(`/stats/summary?days=${days}`);
+
+/** Consumo del plan atribuible al cockpit + estado del límite si se alcanzó. */
+export const getPlanUsage = () => api<PlanUsage>("/stats/plan");
+
+/** Qué hacer con una run cortada por falta de cuota. */
+export const retryRun = (runId: string, mode: RetryMode) =>
+  api<{ mode: RetryMode; runId?: string; scheduledFor?: string }>(`/runs/${runId}/retry`, {
+    method: "POST",
+    ...json({ mode }),
+  });
 
 /* ── Queue ────────────────────────────────────────────────────────────────── */
 

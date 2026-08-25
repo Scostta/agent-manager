@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import {
   getAgent,
+  getPlanUsage,
   getQueueStats,
   getRun,
   getRunBranch,
@@ -12,9 +13,11 @@ import {
   listAgents,
   listClaudeMd,
   listProjects,
+  listRuns,
   listSkills,
   listTasks,
   sseUrl,
+  type RunFilters,
 } from "@/lib/api";
 import {
   isActiveRun,
@@ -32,10 +35,14 @@ export const keys = {
   tasks: (projectId: string) => `/projects/${projectId}/tasks`,
   agent: (id: string) => `/agents/${id}`,
   run: (id: string) => `/runs/${id}`,
+  // La clave lleva los filtros serializados: cada combinación es su propia
+  // entrada de caché.
+  runs: (filters: RunFilters) => ["/runs", JSON.stringify(filters)] as const,
   runLog: (id: string) => `/runs/${id}/log`,
   runBranch: (id: string) => `/runs/${id}/branch`,
   runDiff: (id: string) => `/runs/${id}/diff`,
   stats: (days: number) => `/stats/summary?days=${days}`,
+  plan: "/stats/plan",
 };
 
 export function useProjects() {
@@ -63,6 +70,18 @@ export function useRun(id: string | null) {
 }
 
 /**
+ * Historial de runs. Sondea mientras haya alguna activa: las runs en marcha no
+ * emiten por /board/stream, solo por su propio stream.
+ */
+export function useRuns(filters: RunFilters | null = {}) {
+  return useSWR(filters ? keys.runs(filters) : null, () => listRuns(filters!), {
+    keepPreviousData: true,
+    refreshInterval: (data) =>
+      data?.runs.some((run) => isActiveRun(run)) ? 3000 : 0,
+  });
+}
+
+/**
  * Estado de la rama de la run: si tiene trabajo, si ya está integrado y si se
  * puede mergear ahora. Se calcula con git en vivo, así que cambia si el usuario
  * toca su repo por fuera; por eso revalidamos al volver a la pestaña.
@@ -79,6 +98,14 @@ export function useRunLog(runId: string | null) {
   return useSWR(runId ? keys.runLog(runId) : null, () => getRunLog(runId!), {
     revalidateOnFocus: false,
   });
+}
+
+/**
+ * Consumo del plan. Se sondea despacio: cambia solo cuando termina una run, y
+ * el aviso de límite tiene que aparecer sin recargar.
+ */
+export function usePlanUsage() {
+  return useSWR(keys.plan, getPlanUsage, { refreshInterval: 15000 });
 }
 
 export function useStats(days: number) {

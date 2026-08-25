@@ -17,11 +17,13 @@ import {
 
 import { Icon } from "@/components/ui/icon";
 import { Button, EmptyState, Spinner, cn } from "@/components/ui/primitives.client";
-import { formatCost, formatDayShort, formatTokens } from "@/lib/format";
-import { useStats } from "@/lib/hooks";
+import Link from "next/link";
+
+import { formatClock, formatCost, formatDayShort, formatTokens } from "@/lib/format";
+import { usePlanUsage, useStats } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
-import type { Breakdown, DailyPoint, StatsSummary } from "@/lib/types";
+import type { Breakdown, DailyPoint, PlanUsage, StatsSummary } from "@/lib/types";
 
 /**
  * Paleta categórica validada con el validador del sistema de diseño sobre la
@@ -459,9 +461,78 @@ function Loaded({ stats }: { stats: StatsSummary }): ReactElement {
   );
 }
 
+/**
+ * Lo que el cockpit ha metido en el plan, por las dos ventanas con las que
+ * Claude Code cuenta el consumo. No hay forma soportada de leer el porcentaje
+ * real del plan, así que enseñamos cifras nuestras y lo decimos claramente.
+ */
+function PlanCard({ plan }: { plan: PlanUsage }): ReactElement {
+  const bySubscription = plan.authMode === "subscription";
+  const limit = plan.limit;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border-1 bg-bg-3 px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <Icon name="activity" size={13} className="text-txt-3" />
+        <span className="text-base font-medium text-txt-1">
+          {bySubscription ? "Consumo del plan" : "Consumo por API key"}
+        </span>
+        <span className="text-xs text-txt-3">
+          {bySubscription
+            ? "lo que ha gastado el cockpit de tu suscripción · no incluye la terminal ni claude.ai"
+            : "estas runs se facturan por API, no salen del plan"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
+        {(
+          [
+            { label: "Últimas 5 horas", window: plan.session, hint: "ventana de sesión" },
+            { label: "Últimos 7 días", window: plan.week, hint: "ventana semanal" },
+          ] as const
+        ).map(({ label, window, hint }) => (
+          <div key={label} className="rounded-md border border-border-1 bg-bg-2 px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-2xs uppercase tracking-[.06em] text-txt-3">{label}</span>
+              <span className="text-2xs text-txt-3">{hint}</span>
+            </div>
+            <div className="mt-1 flex items-baseline gap-2.5">
+              <span className="text-md font-semibold tabular-nums text-txt-1">
+                {formatTokens(window.totalTokens)} tok
+              </span>
+              <span className="text-sm tabular-nums text-accent">
+                {formatCost(window.costUsd)}
+              </span>
+              <span className="text-xs text-txt-3">
+                {window.runs} {window.runs === 1 ? "run" : "runs"}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {limit && (
+        <div className="flex items-start gap-2 rounded-md border border-warn/20 bg-warn-dim px-3 py-2 text-xs text-warn">
+          <Icon name="clock" size={12} className="mt-px shrink-0" />
+          <span>
+            {limit.message ?? "Se agotó la cuota del plan."}
+            {limit.waiting && limit.resetAt && (
+              <> Hay una run esperando para reintentarse a las {formatClock(limit.resetAt)}.</>
+            )}{" "}
+            <Link href={`/runs/${limit.runId}`} className="underline hover:text-txt-1">
+              Ver la run
+            </Link>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function DashboardView(): ReactElement {
   const [days, setDays] = useState<number>(30);
   const { data: stats, error, isLoading } = useStats(days);
+  const { data: plan } = usePlanUsage();
 
   return (
     <div className="h-full overflow-y-auto px-7 py-6">
@@ -490,6 +561,12 @@ export function DashboardView(): ReactElement {
           ))}
         </div>
       </div>
+
+      {plan && (
+        <div className="mb-4">
+          <PlanCard plan={plan} />
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-md border border-danger/20 bg-danger-dim px-3 py-2.5 text-sm text-danger">

@@ -12,6 +12,7 @@ import type { IconName } from "@/components/ui/icon";
 
 const NAV = [
   { href: "/projects", icon: "folder", label: "Projects" },
+  { href: "/runs", icon: "terminal", label: "Runs" },
   { href: "/agents", icon: "bot", label: "Agents" },
   { href: "/skills", icon: "layers", label: "Skills" },
   { href: "/claude-md", icon: "file", label: "CLAUDE.md" },
