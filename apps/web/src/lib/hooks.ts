@@ -146,6 +146,10 @@ export function useBoardStream(projectId: string | null) {
       } catch {
         return;
       }
+      if (parsed?.type === "queue_changed") {
+        void mutate(keys.queue);
+        return;
+      }
       if (!parsed?.type?.startsWith("task_")) return;
       if (projectId) void mutate(keys.tasks(projectId));
       void mutate(keys.projects);

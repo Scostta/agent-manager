@@ -16,6 +16,7 @@ import type {
   Skill,
   SkillContent,
   StatsSummary,
+  StopResult,
   Task,
   TaskStatus,
 } from "@/lib/types";
@@ -232,3 +233,15 @@ export const retryRun = (runId: string, mode: RetryMode) =>
 /* ── Queue ────────────────────────────────────────────────────────────────── */
 
 export const getQueueStats = () => api<QueueStats>("/queue/stats");
+
+/** Deja de sacar trabajo nuevo; lo que ya corre sigue hasta terminar. */
+export const pauseQueue = () => api<QueueStats>("/queue/pause", { method: "POST" });
+
+export const resumeQueue = () => api<QueueStats>("/queue/resume", { method: "POST" });
+
+/** Se aplica en caliente: subirla arranca ya lo que quepa. */
+export const setQueueConcurrency = (concurrency: number) =>
+  api<QueueStats>("/queue/concurrency", { method: "PATCH", ...json({ concurrency }) });
+
+/** Kill switch: mata lo que corre, descarta lo que espera y deja en pausa. */
+export const stopQueue = () => api<StopResult>("/queue/stop", { method: "POST" });

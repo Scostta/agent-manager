@@ -3,8 +3,8 @@
 import Link from "next/link";
 
 import { Icon } from "@/components/ui/icon";
-import { Kbd, StatusDot } from "@/components/ui/primitives.client";
-import { useQueueStats } from "@/lib/hooks";
+import { Kbd } from "@/components/ui/primitives.client";
+import { QueueControl } from "@/components/shell/queue-control.client";
 
 import type { ReactElement } from "react";
 
@@ -17,10 +17,6 @@ export function Header({
   crumbs: Crumb[];
   onOpenPalette: () => void;
 }): ReactElement {
-  const { data: queue } = useQueueStats();
-  const running = queue?.pending ?? 0;
-  const waiting = queue?.waiting ?? 0;
-
   return (
     <header className="flex h-header shrink-0 items-center justify-between border-b border-border-1 bg-bg-2 px-4">
       <div className="flex min-w-0 items-center gap-1.5">
@@ -53,13 +49,7 @@ export function Header({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        {running > 0 && (
-          <span className="flex items-center gap-1.5 rounded-md border border-accent/25 bg-accent-dim px-2.5 py-1 text-sm font-medium text-accent">
-            <StatusDot status="running" pulse />
-            {running} {running === 1 ? "run" : "runs"}
-            {waiting > 0 && <span className="text-txt-3">· {waiting} en cola</span>}
-          </span>
-        )}
+        <QueueControl />
         <button
           type="button"
           onClick={onOpenPalette}

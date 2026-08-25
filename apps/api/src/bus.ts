@@ -20,4 +20,6 @@ export type RunEvent =
 export type BoardEvent =
   | { type: "task_updated"; taskId: string }
   | { type: "task_created"; taskId: string }
-  | { type: "task_deleted"; taskId: string };
+  | { type: "task_deleted"; taskId: string }
+  /** Pausa, concurrencia o kill switch: la cabecera revalida su indicador. */
+  | { type: "queue_changed" };

@@ -122,15 +122,26 @@ export type Task = {
 };
 
 export type QueueStats = {
+  /** Runs ejecutándose ahora mismo. */
   pending: number;
+  /** Runs esperando turno. */
   waiting: number;
   concurrency: number;
+  paused: boolean;
+};
+
+export type StopResult = {
+  discarded: number;
+  killed: number;
+  queue: QueueStats;
 };
 
 export type BoardEvent =
   | { type: "task_created"; taskId: string }
   | { type: "task_updated"; taskId: string }
-  | { type: "task_deleted"; taskId: string };
+  | { type: "task_deleted"; taskId: string }
+  /** Pausa, concurrencia o kill switch. */
+  | { type: "queue_changed" };
 
 export const PRIORITY_LOW = 0;
 export const PRIORITY_MEDIUM = 1;

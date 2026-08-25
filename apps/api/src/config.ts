@@ -57,4 +57,7 @@ export const config = {
   authMode: (process.env.AUTH_MODE ?? "subscription") as "subscription" | "api_key",
   // Una run colgada ocupa un hueco de la cola para siempre. 0 = sin límite.
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_MS ?? 30 * 60_000),
+  // Cuántos agentes pueden correr a la vez. Se puede cambiar en caliente desde
+  // la UI; esto es solo el valor de arranque.
+  queueConcurrency: Math.max(1, Number(process.env.QUEUE_CONCURRENCY ?? 2)),
 };
