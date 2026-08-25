@@ -114,6 +114,25 @@ export async function cleanupWorkspace(
 
 const EXCLUDED_NAMES = new Set(["node_modules", ".git", ".next", "dist", "build"]);
 
+/** Los ejemplos no llevan secretos y a veces son la única documentación de qué
+ *  variables necesita el proyecto. */
+const ENV_EXAMPLE_SUFFIXES = [".example", ".sample", ".template"];
+
+const LOCAL_DB_EXTENSIONS = [".db", ".db-journal", ".sqlite", ".sqlite3"];
+
+/**
+ * Un workspace es un sandbox donde corre un agente autónomo que además vuelca
+ * todo lo que lee a un log NDJSON. Copiar ahí el `.env` del proyecto le entrega
+ * las credenciales — incluida la ANTHROPIC_API_KEY del propio cockpit.
+ */
+function isSensitiveFile(name: string): boolean {
+  const lower = name.toLowerCase();
+  if (lower === ".env" || lower.startsWith(".env.")) {
+    return !ENV_EXAMPLE_SUFFIXES.some((suffix) => lower.endsWith(suffix));
+  }
+  return LOCAL_DB_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 /** Windows compara rutas sin distinguir mayúsculas. */
 function normalizePath(p: string): string {
   const resolved = path.resolve(p);
@@ -143,6 +162,7 @@ async function copyDirShallow(
     if (entry.isDirectory()) {
       await copyDirShallow(srcPath, destPath, skip);
     } else if (entry.isFile()) {
+      if (isSensitiveFile(entry.name)) continue;
       await fs.copyFile(srcPath, destPath);
     }
   }

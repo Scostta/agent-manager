@@ -2,8 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../db.js";
 import { bus } from "../bus.js";
-import { enqueueTaskRun, cancelRun } from "../runner/queue.js";
-import { cleanupWorkspace } from "../runner/workspace.js";
+import { enqueueTaskRun } from "../runner/queue.js";
+import { cleanupIfIntegrated } from "../runner/integrate.js";
 
 const TaskInput = z.object({
   projectId: z.string(),
@@ -134,15 +134,18 @@ export async function taskRoutes(app: FastifyInstance) {
       data: { status, position },
     });
 
-    // Al pasar a 'done', limpiamos los worktrees de las runs succeeded
+    // Al pasar a 'done' limpiamos worktrees, pero solo los que ya están
+    // integrados: borrar la rama de una run sin mergear tiraba a la basura el
+    // único sitio donde vivía su trabajo.
     if (status === "done" && previous?.status !== "done") {
       const runsToClean = await db.taskRun.findMany({
         where: { taskId: id, status: "succeeded" },
         include: { task: { include: { project: true } } },
       });
       for (const run of runsToClean) {
-        await cleanupWorkspace(run.task.project, run, { force: true })
-          .catch((err) => console.warn(`[task done] cleanup falló:`, err));
+        await cleanupIfIntegrated(run, run.task.project).catch((err) =>
+          console.warn(`[task done] cleanup falló:`, err),
+        );
       }
     }
 
@@ -173,19 +176,4 @@ export async function taskRoutes(app: FastifyInstance) {
     return { runId };
   });
 
-  app.post("/runs/:runId/cancel", async (req) => {
-    const { runId } = req.params as { runId: string };
-    const ok = await cancelRun(runId);
-    return { ok };
-  });
-
-  app.get("/runs/:runId", async (req, reply) => {
-    const { runId } = req.params as { runId: string };
-    const run = await db.taskRun.findUnique({
-      where: { id: runId },
-      include: { task: true, agent: true },
-    });
-    if (!run) return reply.notFound();
-    return run;
-  });
 }

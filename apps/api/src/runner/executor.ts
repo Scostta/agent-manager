@@ -24,6 +24,10 @@ const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
  */
 const cancelledRuns = new Set<string>();
 
+/** Subconjunto de `cancelledRuns`: las que matamos nosotros por timeout. Estas
+ *  se clasifican como 'failed', no como 'cancelled' — nadie las canceló. */
+const timedOutRuns = new Set<string>();
+
 const MAX_SUMMARY_CHARS = 4000;
 
 export async function cancelRun(runId: string): Promise<boolean> {
@@ -32,6 +36,17 @@ export async function cancelRun(runId: string): Promise<boolean> {
   cancelledRuns.add(runId);
   await killProcessTree(proc.pid);
   return true;
+}
+
+/**
+ * Mata todas las runs en marcha. Se llama al cerrar la API: el proceso muere
+ * justo después, así que no esperamos a que `finish()` persista nada — de eso
+ * se encarga el reaper en el siguiente arranque.
+ */
+export async function killActiveRuns(): Promise<number> {
+  const running = [...activeProcesses.keys()];
+  await Promise.all(running.map((runId) => cancelRun(runId)));
+  return running.length;
 }
 
 function emptyCounts(): TokenCounts {
@@ -131,6 +146,24 @@ export async function executeTaskRun(runId: string): Promise<void> {
 
   activeProcesses.set(runId, child);
   await db.taskRun.update({ where: { id: runId }, data: { pid: child.pid ?? null } });
+
+  // El guard de presupuesto solo salta si el agente tiene budget y si siguen
+  // llegando eventos de tokens; una run que se queda muda no la para nadie.
+  const timeoutTimer =
+    config.runTimeoutMs > 0
+      ? setTimeout(() => {
+          if (!activeProcesses.has(runId)) return;
+          console.warn(
+            `[runner] run ${runId} superó el timeout de ${config.runTimeoutMs} ms, abortando`,
+          );
+          timedOutRuns.add(runId);
+          void cancelRun(runId);
+        }, config.runTimeoutMs)
+      : null;
+
+  function clearRunTimeout(): void {
+    if (timeoutTimer) clearTimeout(timeoutTimer);
+  }
 
   // El CLI emite un evento `assistant` por cada bloque de contenido del mismo
   // mensaje, todos con el mismo usage. Deduplicamos por message.id para no
@@ -260,15 +293,18 @@ export async function executeTaskRun(runId: string): Promise<void> {
       finished = true;
 
       clearInterval(flushTimer);
+      clearRunTimeout();
       activeProcesses.delete(runId);
       const wasCancelled = cancelledRuns.delete(runId);
+      const wasTimeout = timedOutRuns.delete(runId);
       logStream.end();
 
       await persistTokens();
 
       const { code, signal } = exitInfo;
-      const finalStatus =
-        wasCancelled || signal === "SIGTERM" || signal === "SIGKILL"
+      const finalStatus = wasTimeout
+        ? "failed"
+        : wasCancelled || signal === "SIGTERM" || signal === "SIGKILL"
           ? "cancelled"
           : code === 0 && !resultIsError
             ? "succeeded"
@@ -280,7 +316,9 @@ export async function executeTaskRun(runId: string): Promise<void> {
           status: finalStatus,
           endedAt: new Date(),
           pid: null,
-          resultSummary,
+          resultSummary: wasTimeout
+            ? `Run abortada por timeout tras ${Math.round(config.runTimeoutMs / 60_000)} min.`
+            : resultSummary,
         },
       });
 
@@ -310,17 +348,26 @@ export async function executeTaskRun(runId: string): Promise<void> {
       finished = true;
 
       clearInterval(flushTimer);
+      clearRunTimeout();
       activeProcesses.delete(runId);
       cancelledRuns.delete(runId);
+      timedOutRuns.delete(runId);
       logStream.end();
 
       console.error(`[runner] error en spawn de claude CLI:`, err);
+      // ENOENT aquí siempre significa lo mismo, y "spawn claude ENOENT" no se
+      // lo dice a nadie.
+      const summary =
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? `No se encontró el ejecutable '${config.claudeCli}'. Comprueba que Claude Code está instalado y en el PATH, o ajusta CLAUDE_CLI en el .env.`
+          : `Error lanzando claude CLI: ${err.message}`;
+
       await db.taskRun.update({
         where: { id: runId },
         data: {
           status: "failed",
           endedAt: new Date(),
-          resultSummary: `Error spawning claude CLI: ${err.message}`,
+          resultSummary: summary,
           pid: null,
         },
       });
