@@ -32,6 +32,7 @@ pnpm db:migrate       # aplicar migraciones Prisma
 pnpm db:studio        # abrir Prisma Studio
 pnpm db:seed          # datos de ejemplo
 pnpm typecheck        # typecheck de todo el monorepo
+pnpm test             # tests con node:test (por ahora solo apps/api)
 pnpm build            # build de producción
 ```
 
@@ -124,6 +125,23 @@ apps/
 - Todo esto ya está en `src/lib/process.ts`, no lo reimplementes.
 - Guarda siempre el log NDJSON en `LOGS_ROOT/{runId}.ndjson`. Una línea = un evento.
 - Una run cancelada o fallida **no** mueve la task a `review`. Solo las `succeeded`.
+
+## Tests
+
+- **Runner:** `node:test` con `tsx`. Sin dependencias de test — no metas vitest
+  ni jest sin permiso explícito.
+- **Dónde:** junto al código que prueban, como `foo.test.ts`. `tsconfig` los
+  excluye del build, pero sí entran en el typecheck.
+- **Qué se prueba:** lo que falla en silencio y sale caro. Hoy: el parser del
+  límite de cuota (`rateLimit`), las tarifas que alimentan el guard de
+  presupuesto (`pricing`), la copia de workspace (que no se filtren secretos ni
+  se copie a sí misma) y los helpers de git contra repos temporales de verdad
+  (diff con cambios sin commitear, merge, abort en conflicto).
+- **Qué no se prueba todavía:** nada que necesite BD o spawnear procesos —
+  scanner de skills, executor y rutas. Si lo abordas, monta una SQLite temporal
+  en lugar de mockear Prisma.
+- Un test que no falla cuando reintroduces el bug no vale: comprueba que falla
+  antes de darlo por bueno.
 
 ## Convenciones de código
 
