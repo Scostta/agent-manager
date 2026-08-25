@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { scanSkills, watchSkills } from "./skills/scanner.js";
 import { reapOrphanRuns } from "./runner/reaper.js";
 import { clearAllRetries, restorePendingRetries } from "./runner/scheduler.js";
+import { startWorkspaceGc, stopWorkspaceGc } from "./runner/gc.js";
 import { killActiveRuns } from "./runner/executor.js";
 
 import { projectRoutes } from "./routes/projects.js";
@@ -18,6 +19,7 @@ import { sseRoutes } from "./routes/sse.js";
 import { queueRoutes } from "./routes/queue.js";
 import { runRoutes } from "./routes/runs.js";
 import { statsRoutes } from "./routes/stats.js";
+import { workspaceRoutes } from "./routes/workspaces.js";
 
 const app = Fastify({ logger: { level: "info" } });
 
@@ -47,6 +49,7 @@ await app.register(sseRoutes);
 await app.register(queueRoutes);
 await app.register(runRoutes);
 await app.register(statsRoutes);
+await app.register(workspaceRoutes);
 
 app.get("/health", async () => ({ ok: true, time: new Date().toISOString() }));
 
@@ -55,6 +58,7 @@ app.get("/health", async () => ({ ok: true, time: new Date().toISOString() }));
 // seguirían gastando tokens sin nadie escuchándolos.
 app.addHook("onClose", async () => {
   clearAllRetries();
+  stopWorkspaceGc();
   const killed = await killActiveRuns();
   if (killed > 0) app.log.info(`[shutdown] ${killed} run(s) activa(s) abortada(s)`);
 });
@@ -82,6 +86,9 @@ if (pendingRetries > 0) {
 const indexed = await scanSkills();
 app.log.info(`[skills] ${indexed} SKILL.md indexados`);
 watchSkills();
+
+// Barre los workspaces que ya no hacen falta: al arrancar y cada pocas horas.
+startWorkspaceGc();
 
 await app.listen({ port: config.port, host: config.host });
 app.log.info(`API escuchando en http://${config.host}:${config.port}`);

@@ -19,7 +19,11 @@ import { Icon } from "@/components/ui/icon";
 import { Button, EmptyState, Spinner, cn } from "@/components/ui/primitives.client";
 import Link from "next/link";
 
-import { formatClock, formatCost, formatDayShort, formatTokens } from "@/lib/format";
+import useSWR from "swr";
+
+import { useToast } from "@/components/ui/toast.client";
+import { collectWorkspaces, getWorkspaceReport } from "@/lib/api";
+import { formatBytes, formatClock, formatCost, formatDayShort, formatTokens } from "@/lib/format";
 import { usePlanUsage, useStats } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
@@ -529,6 +533,83 @@ function PlanCard({ plan }: { plan: PlanUsage }): ReactElement {
   );
 }
 
+/**
+ * Disco que ocupan los workspaces y qué parte se puede recuperar. El GC corre
+ * solo cada pocas horas; esto es para verlo y para forzarlo.
+ */
+function DiskCard(): ReactElement {
+  const { data: report, mutate: reload } = useSWR("/workspaces", () => getWorkspaceReport());
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+
+  if (!report || report.total.count === 0) return <></>;
+
+  const clean = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const result = await collectWorkspaces();
+      await reload();
+      toast(
+        result.removed === 0
+          ? "No había nada que limpiar"
+          : `${result.removed} workspace(s) limpiados · ${formatBytes(result.freedBytes)}${
+              result.keptBranches ? ` · ${result.keptBranches} con su rama intacta` : ""
+            }`,
+        "success",
+      );
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo limpiar", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const kept = report.total.count - report.reclaimable.count;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border-1 bg-bg-3 px-4 py-3">
+      <span className="flex items-center gap-2">
+        <Icon name="archive" size={13} className="text-txt-3" />
+        <span className="text-base font-medium text-txt-1">Workspaces</span>
+      </span>
+
+      <span className="text-sm text-txt-2">
+        {report.total.count} {report.total.count === 1 ? "carpeta" : "carpetas"} ·{" "}
+        <span className="font-mono tabular-nums">{formatBytes(report.total.sizeBytes)}</span>
+      </span>
+
+      {report.reclaimable.count > 0 ? (
+        <span className="text-sm text-txt-3">
+          {report.reclaimable.count === 1 ? "1 recuperable" : `${report.reclaimable.count} recuperables`} ·{" "}
+          <span className="font-mono tabular-nums text-txt-2">
+            {formatBytes(report.reclaimable.sizeBytes)}
+          </span>
+        </span>
+      ) : (
+        <span className="text-sm text-txt-3">nada que recuperar ahora mismo</span>
+      )}
+
+      {kept > 0 && (
+        <span className="text-xs text-txt-3">
+          {kept} se conserva{kept === 1 ? "" : "n"}: trabajo sin integrar o runs recientes
+        </span>
+      )}
+
+      <Button
+        variant="subtle"
+        size="xs"
+        icon="trash"
+        className="ml-auto"
+        disabled={report.reclaimable.count === 0}
+        loading={busy}
+        onClick={() => void clean()}
+      >
+        Limpiar
+      </Button>
+    </div>
+  );
+}
+
 export function DashboardView(): ReactElement {
   const [days, setDays] = useState<number>(30);
   const { data: stats, error, isLoading } = useStats(days);
@@ -563,8 +644,9 @@ export function DashboardView(): ReactElement {
       </div>
 
       {plan && (
-        <div className="mb-4">
+        <div className="mb-4 flex flex-col gap-3">
           <PlanCard plan={plan} />
+          <DiskCard />
         </div>
       )}
 
