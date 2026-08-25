@@ -48,6 +48,13 @@ export const config = {
   skillsPaths: list(process.env.SKILLS_PATHS ?? "./skills").map(expand),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   claudeCli: process.env.CLAUDE_CLI ?? "claude",
+  /**
+   * "subscription": el CLI usa tu login de claude.ai y las runs consumen del
+   * plan. "api_key": inyectamos ANTHROPIC_API_KEY y se facturan por API.
+   * Una key presente en el entorno gana sobre el login, así que en modo
+   * suscripción hay que quitarla del entorno del hijo, no basta con no ponerla.
+   */
+  authMode: (process.env.AUTH_MODE ?? "subscription") as "subscription" | "api_key",
   // Una run colgada ocupa un hueco de la cola para siempre. 0 = sin límite.
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_MS ?? 30 * 60_000),
 };

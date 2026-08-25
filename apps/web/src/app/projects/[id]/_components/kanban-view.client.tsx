@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -19,6 +19,7 @@ import { COLUMNS, COLUMN_LABEL } from "./columns";
 import { NewTaskModal } from "./new-task-modal.client";
 import { SortableTaskCard, TaskCardBody } from "./task-card.client";
 import { TaskDrawer } from "./task-drawer.client";
+import { Modal } from "@/components/ui/modal.client";
 import { Icon } from "@/components/ui/icon";
 import { Button, EmptyState, Kbd, StatusDot, cn } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
@@ -30,6 +31,7 @@ import {
   updateTask,
 } from "@/lib/api";
 import { keys, useAgents, useBoardStream, useSkills, useTasks } from "@/lib/hooks";
+import { isActiveRun } from "@/lib/types";
 
 import type { ReactElement } from "react";
 import type {
@@ -38,7 +40,7 @@ import type {
   DragOverEvent,
   DragStartEvent,
 } from "@dnd-kit/core";
-import type { Project, Task, TaskStatus } from "@/lib/types";
+import type { Agent, Project, Task, TaskStatus } from "@/lib/types";
 
 /**
  * closestCorners resuelve la columna por el rectángulo de la tarjeta, no por el
@@ -134,6 +136,8 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
   const [compact, setCompact] = useState(false);
   const [addingTo, setAddingTo] = useState<TaskStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [pendingLaunch, setPendingLaunch] = useState<string | null>(null);
+  const dragOriginRef = useRef<TaskStatus | null>(null);
 
   // El servidor manda; el estado local solo existe para que el drag se vea
   // instantáneo antes de que la revalidación traiga el orden definitivo.
@@ -218,7 +222,30 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
     } catch (err) {
       toast(err instanceof Error ? err.message : "No se pudo mover la tarea", "error");
       await mutate(keys.tasks(project.id));
+      return;
     }
+
+    // Soltar en "En curso" es el gesto para lanzar, pero spawnear un agente
+    // cuesta dinero: confirmamos antes en vez de arrancar por un arrastre torpe.
+    if (target === "in_progress" && dragOriginRef.current !== "in_progress") {
+      const task = board.find((t) => t.id === taskId);
+      if (!task?.assignedAgentId) {
+        toast("Asigna un agente a la tarea para poder lanzarla", "warn");
+        return;
+      }
+      setPendingLaunch(taskId);
+    }
+  };
+
+  const launchPending = async (): Promise<void> => {
+    const task = pendingLaunch ? board.find((t) => t.id === pendingLaunch) : null;
+    if (!task?.assignedAgentId) return;
+    setPendingLaunch(null);
+    await withBusy(async () => {
+      await runTask(task.id, task.assignedAgentId!);
+      toast(`Run lanzada para “${task.title}”`, "success");
+      await refresh();
+    });
   };
 
   const withBusy = async (fn: () => Promise<void>) => {
@@ -238,7 +265,12 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
     await mutate(keys.queue);
   };
 
-  const activeRuns = byStatus.in_progress.length;
+  // Cuenta runs de verdad: una task puede estar en "En curso" sin nada
+  // ejecutándose (se movió a mano, o no se confirmó el lanzamiento).
+  const activeRuns = board.filter((task) => isActiveRun(task.runs?.[0])).length;
+  const launchAgentId = pendingLaunch
+    ? board.find((t) => t.id === pendingLaunch)?.assignedAgentId
+    : null;
 
   if (error) {
     return (
@@ -290,7 +322,7 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
           <EmptyState
             icon="layers"
             title="El tablero está vacío"
-            hint="Crea una tarea, asígnale un agente y arrástrala para lanzarla."
+            hint="Crea una tarea, asígnale un agente y arrástrala a “En curso” para lanzarla."
             action={
               <Button variant="primary" size="sm" icon="plus" onClick={() => setAddingTo("todo")}>
                 Nueva tarea
@@ -301,7 +333,12 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
           <DndContext
             sensors={sensors}
             collisionDetection={collisionDetection}
-            onDragStart={(e: DragStartEvent) => setDraggingId(String(e.active.id))}
+            onDragStart={(e: DragStartEvent) => {
+              setDraggingId(String(e.active.id));
+              // handleDragOver ya habrá reubicado la tarjeta en local cuando
+              // termine el arrastre: guardamos de dónde salió.
+              dragOriginRef.current = statusOf(String(e.active.id));
+            }}
             onDragOver={handleDragOver}
             onDragEnd={(e) => void handleDragEnd(e)}
             onDragCancel={() => setDraggingId(null)}
@@ -335,7 +372,7 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
         <div className="flex shrink-0 items-center gap-2 border-t border-border-1 bg-bg-2 px-4 py-1.5 text-2xs text-txt-3">
           <Kbd>Ctrl K</Kbd> buscar
           <span className="text-border-3">·</span>
-          Arrastra una tarjeta para cambiarla de columna
+          Arrastra una tarjeta para cambiarla de columna · soltar en “En curso” lanza la run
         </div>
       </div>
 
@@ -391,6 +428,60 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
         onClose={() => setAddingTo(null)}
         onCreated={() => void refresh()}
       />
+
+      <LaunchConfirm
+        task={pendingLaunch ? (board.find((t) => t.id === pendingLaunch) ?? null) : null}
+        agent={agents?.find((a) => a.id === launchAgentId) ?? null}
+        busy={busy}
+        onConfirm={() => void launchPending()}
+        onCancel={() => setPendingLaunch(null)}
+      />
     </div>
+  );
+}
+
+/** Confirmación antes de spawnear: soltar en "En curso" gasta dinero real. */
+function LaunchConfirm({
+  task,
+  agent,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  task: Task | null;
+  agent: Agent | null;
+  busy: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): ReactElement {
+  return (
+    <Modal
+      open={!!task}
+      onClose={onCancel}
+      title="Lanzar esta tarea"
+      footer={
+        <>
+          <Button variant="primary" icon="play" loading={busy} onClick={onConfirm}>
+            Lanzar run
+          </Button>
+          <Button variant="ghost" onClick={onCancel}>
+            Ahora no
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm text-txt-2">
+        Se ejecutará <span className="text-txt-1">“{task?.title}”</span> con{" "}
+        <span className="text-txt-1">{agent?.name ?? "el agente asignado"}</span>
+        {agent?.model && <span className="font-mono text-xs text-txt-3"> · {agent.model}</span>}.
+      </p>
+      <p className="text-xs text-txt-3">
+        {agent?.maxBudgetUsd
+          ? `La run se corta sola al superar $${agent.maxBudgetUsd}.`
+          : "Este agente no tiene tope de gasto configurado."}{" "}
+        La tarea ya está en “En curso”; si no lanzas ahora, puedes hacerlo desde el panel
+        de la tarea.
+      </p>
+    </Modal>
   );
 }

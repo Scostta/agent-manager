@@ -57,3 +57,10 @@ export function shortenPath(path: string, maxLength = 48): string {
   if (parts.length <= 2) return path.slice(0, maxLength - 1) + "…";
   return `${parts[0]}${path.includes("\\") ? "\\" : "/"}…${path.includes("\\") ? "\\" : "/"}${parts.slice(-2).join(path.includes("\\") ? "\\" : "/")}`;
 }
+
+/** "14:35" — hora local de un instante ISO. Para avisos de "vuelve a las…". */
+export function formatClock(input: string | number | Date): string {
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+}

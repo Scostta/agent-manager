@@ -56,9 +56,38 @@ export type TaskRun = {
   logPath: string;
   resultSummary: string | null;
   pid: number | null;
+  /** "rate_limit" = sin cuota, esperando decisión; "rate_limit_waiting" = se
+   *  reintentará sola al reset; "error" = fallo normal. */
+  failureKind: string | null;
+  rateLimitResetAt: string | null;
   startedAt: string;
   endedAt: string | null;
 };
+
+export function isRateLimited(run: { failureKind?: string | null } | null | undefined): boolean {
+  return run?.failureKind === "rate_limit" || run?.failureKind === "rate_limit_waiting";
+}
+
+export type WindowUsage = TokenTotals & { since: string };
+
+/** GET /stats/plan. Solo cuenta lo que ha ejecutado el cockpit. */
+export type PlanUsage = {
+  authMode: "subscription" | "api_key";
+  /** Ventana de 5h, la que usa el plan para el límite de sesión. */
+  session: WindowUsage;
+  week: WindowUsage;
+  limit: {
+    runId: string;
+    taskId: string;
+    /** true si ya se programó el reintento al reset. */
+    waiting: boolean;
+    resetAt: string | null;
+    message: string | null;
+    hitAt: string;
+  } | null;
+};
+
+export type RetryMode = "wait" | "api_key" | "now";
 
 export type TokenTotals = {
   inputTokens: number;
@@ -145,6 +174,36 @@ export type ClaudeMd = {
 
 /** GET /runs/:id incluye task y agente; la lista del board no. */
 export type RunWithContext = TaskRun & { task: Task; agent: Agent };
+
+/** Fila de GET /runs: solo lo justo de task y agente para pintar la tabla. */
+export type RunListItem = TaskRun & {
+  task: { id: string; title: string; projectId: string };
+  agent: { id: string; name: string; model: string };
+};
+
+export type RunList = {
+  runs: RunListItem[];
+  /** Total que cumple el filtro, no lo devuelto en esta página. */
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export const RUN_STATUSES = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+] as const satisfies readonly RunStatus[];
+
+export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
+  queued: "En cola",
+  running: "Ejecutando",
+  succeeded: "Completada",
+  failed: "Fallida",
+  cancelled: "Cancelada",
+};
 
 /** Eventos de /runs/:id/stream. Espejo de `RunEvent` en apps/api/src/bus.ts. */
 export type RunEvent =

@@ -6,6 +6,7 @@ import { ZodError } from "zod";
 import { config } from "./config.js";
 import { scanSkills, watchSkills } from "./skills/scanner.js";
 import { reapOrphanRuns } from "./runner/reaper.js";
+import { clearAllRetries, restorePendingRetries } from "./runner/scheduler.js";
 import { killActiveRuns } from "./runner/executor.js";
 
 import { projectRoutes } from "./routes/projects.js";
@@ -53,6 +54,7 @@ app.get("/health", async () => ({ ok: true, time: new Date().toISOString() }));
 // reaper marcaría las filas como failed al rearrancar, pero los procesos
 // seguirían gastando tokens sin nadie escuchándolos.
 app.addHook("onClose", async () => {
+  clearAllRetries();
   const killed = await killActiveRuns();
   if (killed > 0) app.log.info(`[shutdown] ${killed} run(s) activa(s) abortada(s)`);
 });
@@ -70,6 +72,11 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 const reaped = await reapOrphanRuns();
 if (reaped > 0) {
   app.log.info(`[reaper] ${reaped} run(s) huérfana(s) marcadas como failed`);
+}
+
+const pendingRetries = await restorePendingRetries();
+if (pendingRetries > 0) {
+  app.log.info(`[scheduler] ${pendingRetries} run(s) esperando a que se reponga la cuota`);
 }
 
 const indexed = await scanSkills();

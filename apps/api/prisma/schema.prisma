@@ -96,6 +96,11 @@ model TaskRun {
   logPath         String
   resultSummary   String?
   pid             Int?
+  // Por qué falló: "rate_limit" (se agotó el plan y espera decisión),
+  // "rate_limit_waiting" (el usuario eligió esperar al reset), "error".
+  failureKind     String?
+  // Cuándo vuelve a haber cuota, leído del mensaje del CLI.
+  rateLimitResetAt DateTime?
   startedAt       DateTime  @default(now())
   endedAt         DateTime?
 

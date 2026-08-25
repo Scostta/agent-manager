@@ -1,10 +1,14 @@
 import PQueue from "p-queue";
 import { db } from "../db.js";
-import { executeTaskRun } from "./executor.js";
+import { executeTaskRun, type AuthMode } from "./executor.js";
 
 const queue = new PQueue({ concurrency: 2 });
 
-export async function enqueueTaskRun(taskId: string, agentId: string): Promise<string> {
+export async function enqueueTaskRun(
+  taskId: string,
+  agentId: string,
+  authMode?: AuthMode,
+): Promise<string> {
   const agent = await db.agent.findUnique({ where: { id: agentId } });
   if (!agent) throw new Error(`Agent ${agentId} no encontrado`);
 
@@ -14,7 +18,7 @@ export async function enqueueTaskRun(taskId: string, agentId: string): Promise<s
 
   await db.task.update({ where: { id: taskId }, data: { status: "in_progress" } });
 
-  queue.add(() => executeTaskRun(run.id)).catch((err) => {
+  queue.add(() => executeTaskRun(run.id, authMode)).catch((err) => {
     console.error(`[queue] Error ejecutando run ${run.id}:`, err);
     db.taskRun
       .update({
