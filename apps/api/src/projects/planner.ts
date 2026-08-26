@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { bus } from "../bus.js";
 import { config } from "../config.js";
-import { childEnv } from "../runner/executor.js";
+import { childEnv, runtime } from "../runner/executor.js";
 import { estimateCost, type TokenCounts } from "../runner/pricing.js";
 import { killProcessTree, spawnOptions } from "../lib/process.js";
 
@@ -99,7 +99,8 @@ export async function planInitialTasks(input: PlanInput): Promise<PlanResult> {
     "--allowedTools", "Read,Glob,Grep",
   ];
 
-  const child = spawn(config.claudeCli, args, {
+  // Mismo punto de sustitución que el executor: los tests no spawnean el CLI.
+  const child = runtime.spawn(config.claudeCli, args, {
     cwd: input.repoPath,
     env: childEnv(config.authMode),
     ...spawnOptions(),

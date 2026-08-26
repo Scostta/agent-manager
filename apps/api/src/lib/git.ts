@@ -153,7 +153,7 @@ export async function commitAll(
 ): Promise<boolean> {
   if (!(await execGit(worktreePath, ["status", "--porcelain"]))) return false;
   await execGit(worktreePath, ["add", "-A"]);
-  await execGit(worktreePath, ["commit", "-m", message]);
+  await commitWithFallbackIdentity(worktreePath, ["commit", "-m", message]);
   return true;
 }
 
@@ -166,13 +166,32 @@ export async function mergeBranch(
   branch: string,
   message: string,
 ): Promise<void> {
+  const args = ["merge", "--no-ff", branch, "-m", message];
+  let failure: unknown;
+
   try {
-    await execGit(repoPath, ["merge", "--no-ff", branch, "-m", message]);
+    await execGit(repoPath, args);
+    return;
   } catch (err) {
-    await execGit(repoPath, ["merge", "--abort"]).catch(() => {});
-    if (err instanceof GitError) throw new MergeConflictError(conflictedFiles(err));
-    throw err;
+    failure = err;
   }
+
+  // `merge --no-ff` crea un commit, así que sin identidad falla igual que un
+  // commit normal — y deja el merge a medias. Se aborta y se reintenta firmando
+  // con la de respaldo antes de dar el merge por imposible.
+  if (isMissingIdentity(failure)) {
+    await execGit(repoPath, ["merge", "--abort"]).catch(() => {});
+    try {
+      await execGit(repoPath, [...FALLBACK_IDENTITY, ...args]);
+      return;
+    } catch (err) {
+      failure = err;
+    }
+  }
+
+  await execGit(repoPath, ["merge", "--abort"]).catch(() => {});
+  if (failure instanceof GitError) throw new MergeConflictError(conflictedFiles(failure));
+  throw failure;
 }
 
 export class MergeConflictError extends Error {
@@ -210,12 +229,26 @@ export async function initRepo(repoPath: string): Promise<void> {
     execGit(repoPath, ["init"]),
   );
   await execGit(repoPath, ["add", "-A"]);
-  const commit = ["commit", "--allow-empty", "-m", "Initial commit"];
+  await commitWithFallbackIdentity(repoPath, [
+    "commit",
+    "--allow-empty",
+    "-m",
+    "Initial commit",
+  ]);
+}
+
+/**
+ * Commitea aunque el usuario no tenga identidad global de git. Es más común de
+ * lo que parece: quien la configura por repo (`git config user.email` sin
+ * `--global`) no tiene ninguna en los proyectos que crea el cockpit, y sin esto
+ * fallan tanto el commit inicial como el "Mergear en main" de una run.
+ */
+async function commitWithFallbackIdentity(cwd: string, args: string[]): Promise<void> {
   try {
-    await execGit(repoPath, commit);
+    await execGit(cwd, args);
   } catch (err) {
     if (!isMissingIdentity(err)) throw err;
-    await execGit(repoPath, [...FALLBACK_IDENTITY, ...commit]);
+    await execGit(cwd, [...FALLBACK_IDENTITY, ...args]);
   }
 }
 
