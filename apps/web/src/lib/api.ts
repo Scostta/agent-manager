@@ -1,10 +1,14 @@
 import type {
   Agent,
   BranchStatus,
+  BrowseRoot,
   ClaudeMd,
   ClaudeMdScope,
+  ClaudeMdFile,
+  DirListing,
   MergeResult,
   PlanUsage,
+  PlanResult,
   Project,
   QueueStats,
   RunDiff,
@@ -76,7 +80,18 @@ export const createProject = (input: {
   description?: string;
   repoPath: string;
   workspaceStrategy?: "worktree" | "copy";
+  /** Crea el repo si la carpeta no lo es: sin git no hay worktrees. */
+  initGit?: boolean;
+  /** Se guarda en BD y se escribe como CLAUDE.md dentro de la carpeta. */
+  claudeMdContent?: string | null;
 }) => api<Project>("/projects", { method: "POST", ...json(input) });
+
+/** Propone el backlog inicial. Tarda lo que tarde el CLI; no guarda nada. */
+export const planProject = (id: string, model?: string) =>
+  api<PlanResult>(`/projects/${id}/plan`, { method: "POST", ...json({ model }) });
+
+export const cancelProjectPlan = (id: string) =>
+  api<{ cancelled: boolean }>(`/projects/${id}/plan`, { method: "DELETE" });
 
 export const updateProject = (id: string, input: Partial<Project>) =>
   api<Project>(`/projects/${id}`, { method: "PATCH", ...json(input) });
@@ -149,6 +164,12 @@ export const createTask = (input: {
   requiredSkillIds?: string[];
   priority?: number;
 }) => api<Task>("/tasks", { method: "POST", ...json(input) });
+
+/** Alta del backlog inicial. `dependsOn` son índices dentro del propio array. */
+export const createTasksBulk = (
+  projectId: string,
+  tasks: { title: string; description?: string; dependsOn?: number[] }[],
+) => api<Task[]>(`/projects/${projectId}/tasks/bulk`, { method: "POST", ...json({ tasks }) });
 
 export const updateTask = (
   id: string,
@@ -261,3 +282,15 @@ export const collectWorkspaces = (options: { days?: number; dryRun?: boolean } =
 
 export const getTaskDependencies = (taskId: string) =>
   api<{ dependencies: TaskDependency[] }>(`/tasks/${taskId}/dependencies`);
+
+/* ── Filesystem ───────────────────────────────────────────────────────────── */
+
+/** Puntos de partida del explorador: inicio y unidades del disco. */
+export const listFsRoots = () => api<BrowseRoot[]>("/fs/roots");
+
+export const browseDirectory = (path?: string) =>
+  api<DirListing>(`/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ""}`);
+
+/** CLAUDE.md que ya viva en esa carpeta, para no sobrescribirlo a ciegas. */
+export const readClaudeMdFile = (path: string) =>
+  api<ClaudeMdFile>(`/fs/claude-md?path=${encodeURIComponent(path)}`);

@@ -90,7 +90,7 @@ export type AuthMode = "subscription" | "api_key";
  * de claude.ai, así que para consumir del plan hay que borrarla del entorno del
  * hijo — heredarla sin más factura por API sin decir nada.
  */
-function childEnv(mode: AuthMode): NodeJS.ProcessEnv {
+export function childEnv(mode: AuthMode): NodeJS.ProcessEnv {
   const env = { ...process.env };
   if (mode === "api_key") {
     env.ANTHROPIC_API_KEY = config.anthropicApiKey ?? process.env.ANTHROPIC_API_KEY;

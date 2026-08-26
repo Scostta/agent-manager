@@ -53,7 +53,18 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 - ✅ **Historial de runs** con filtros y reintentos visibles.
 - ✅ **Suscripción por defecto** + aviso de cuota agotada con opción de esperar
   al reset o tirar de la API key.
-- ⬜ Templates de proyecto.
+- ✅ **Alta de proyecto guiada** (`/projects/new`), en cuatro pasos: descripción
+  → carpeta (explorador servido por la API, porque el navegador no puede dar
+  rutas absolutas) → `CLAUDE.md` opcional → backlog propuesto por Claude.
+  - El `git init` lleva commit inicial obligatorio: sin `HEAD` no hay
+    `git worktree add`, así que el proyecto no podría lanzar ni una run.
+  - La planificación spawnea el CLI con `--allowedTools Read,Glob,Grep` y
+    devuelve JSON. No es una `TaskRun`: no hay Task de la que colgar, no pasa
+    por la cola y su consumo no entra en el dashboard (queda el NDJSON en
+    `LOGS_ROOT/plan-<projectId>.ndjson`).
+  - Ni la home ni la raíz del disco valen como carpeta de proyecto: `git init`
+    ahí versionaría el perfil entero y cada run lo copiaría al workspace.
+- ❌ Templates de proyecto — descartadas: las sustituye el alta guiada.
 
 ## Lo que falta por probar
 

@@ -1,23 +1,17 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { useSWRConfig } from "swr";
+import { useRouter } from "next/navigation";
 
 import { Icon } from "@/components/ui/icon";
-import { Modal } from "@/components/ui/modal.client";
 import {
   Badge,
   Button,
   EmptyState,
-  Input,
   StatusDot,
-  Textarea,
 } from "@/components/ui/primitives.client";
-import { useToast } from "@/components/ui/toast.client";
-import { createProject } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
-import { keys, useProjects } from "@/lib/hooks";
+import { useProjects } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
 import type { Project, TaskStatus } from "@/lib/types";
@@ -95,111 +89,10 @@ function ProjectCard({ project }: { project: Project }): ReactElement {
   );
 }
 
-function NewProjectModal({ open, onClose }: { open: boolean; onClose: () => void }): ReactElement {
-  const toast = useToast();
-  const { mutate } = useSWRConfig();
-  const [name, setName] = useState("");
-  const [repoPath, setRepoPath] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const reset = () => {
-    setName("");
-    setRepoPath("");
-    setDescription("");
-  };
-
-  const submit = async () => {
-    if (!name.trim() || !repoPath.trim()) return;
-    setSaving(true);
-    try {
-      const created = await createProject({
-        name: name.trim(),
-        repoPath: repoPath.trim(),
-        description: description.trim() || undefined,
-      });
-      await mutate(keys.projects);
-      toast(
-        `Proyecto creado · estrategia ${created.workspaceStrategy} detectada`,
-        "success",
-      );
-      reset();
-      onClose();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "No se pudo crear el proyecto", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Nuevo proyecto"
-      footer={
-        <>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={submit}
-            loading={saving}
-            disabled={!name.trim() || !repoPath.trim()}
-          >
-            Crear proyecto
-          </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancelar
-          </Button>
-        </>
-      }
-    >
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-txt-2">Nombre</span>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="mi-proyecto"
-          inputSize="md"
-          autoFocus
-        />
-      </label>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-txt-2">Ruta del repo</span>
-        <Input
-          value={repoPath}
-          onChange={(e) => setRepoPath(e.target.value)}
-          placeholder="C:\\Users\\tu-usuario\\Proyectos\\mi-repo"
-          inputSize="md"
-          mono
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void submit();
-          }}
-        />
-        <span className="text-xs text-txt-3">
-          Ruta absoluta. Si contiene un <span className="font-mono">.git</span>, se usará la
-          estrategia <span className="font-mono">worktree</span>; si no,{" "}
-          <span className="font-mono">copy</span>.
-        </span>
-      </label>
-
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-txt-2">Descripción (opcional)</span>
-        <Textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="Para qué sirve este proyecto"
-          rows={2}
-        />
-      </label>
-    </Modal>
-  );
-}
-
 export function ProjectsView(): ReactElement {
   const { data: projects, error, isLoading } = useProjects();
-  const [showNew, setShowNew] = useState(false);
+  const router = useRouter();
+  const newProject = (): void => router.push("/projects/new");
 
   return (
     <div className="h-full overflow-y-auto px-7 py-6">
@@ -212,7 +105,7 @@ export function ProjectsView(): ReactElement {
               : `${projects?.length ?? 0} ${projects?.length === 1 ? "repositorio" : "repositorios"}`}
           </p>
         </div>
-        <Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>
+        <Button variant="primary" size="sm" icon="plus" onClick={newProject}>
           Nuevo proyecto
         </Button>
       </div>
@@ -234,7 +127,7 @@ export function ProjectsView(): ReactElement {
           title="Todavía no hay proyectos"
           hint="Un proyecto apunta a una carpeta local. Cada uno tiene su propio kanban y sus runs."
           action={
-            <Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>
+            <Button variant="primary" size="sm" icon="plus" onClick={newProject}>
               Crear el primero
             </Button>
           }
@@ -246,8 +139,6 @@ export function ProjectsView(): ReactElement {
           <ProjectCard key={project.id} project={project} />
         ))}
       </div>
-
-      <NewProjectModal open={showNew} onClose={() => setShowNew(false)} />
     </div>
   );
 }

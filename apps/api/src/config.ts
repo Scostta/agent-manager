@@ -57,6 +57,11 @@ export const config = {
   authMode: (process.env.AUTH_MODE ?? "subscription") as "subscription" | "api_key",
   // Una run colgada ocupa un hueco de la cola para siempre. 0 = sin límite.
   runTimeoutMs: Number(process.env.RUN_TIMEOUT_MS ?? 30 * 60_000),
+  // Modelo que propone las tareas iniciales al crear un proyecto. No edita
+  // nada, solo lee y devuelve JSON, así que no hace falta el modelo más caro.
+  plannerModel: process.env.PLANNER_MODEL ?? "claude-sonnet-5",
+  // Más corto que runTimeoutMs: el usuario está esperando delante del formulario.
+  planTimeoutMs: Number(process.env.PLAN_TIMEOUT_MS ?? 5 * 60_000),
   // Cuántos agentes pueden correr a la vez. Se puede cambiar en caliente desde
   // la UI; esto es solo el valor de arranque.
   queueConcurrency: Math.max(1, Number(process.env.QUEUE_CONCURRENCY ?? 2)),

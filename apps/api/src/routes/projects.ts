@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../db.js";
-import { detectWorkspaceStrategy } from "../runner/workspace.js";
+import { ScaffoldError, scaffoldProject } from "../projects/scaffold.js";
+import { PlanError, cancelPlan, planInitialTasks } from "../projects/planner.js";
 
 const ProjectInput = z.object({
   name: z.string().min(1),
@@ -12,6 +13,15 @@ const ProjectInput = z.object({
   // Project y ninguna ruta la escribía.
   claudeMdId: z.string().nullable().optional(),
 });
+
+const CreateProjectInput = ProjectInput.extend({
+  /** Inicializar la carpeta como repo Git para poder usar worktrees. */
+  initGit: z.boolean().optional(),
+  /** CLAUDE.md del proyecto: se guarda en BD y se escribe en la carpeta. */
+  claudeMdContent: z.string().nullable().optional(),
+});
+
+const PlanInput = z.object({ model: z.string().min(1).optional() });
 
 export async function projectRoutes(app: FastifyInstance) {
   app.get("/projects", async () => {
@@ -44,13 +54,48 @@ export async function projectRoutes(app: FastifyInstance) {
     return project;
   });
 
-  app.post("/projects", async (req) => {
-    const body = ProjectInput.parse(req.body);
-    const strategy = body.workspaceStrategy
-      ?? (await detectWorkspaceStrategy(body.repoPath));
-    return db.project.create({
-      data: { ...body, workspaceStrategy: strategy },
+  app.post("/projects", async (req, reply) => {
+    const body = CreateProjectInput.parse(req.body);
+    try {
+      return await scaffoldProject(body);
+    } catch (err) {
+      if (err instanceof ScaffoldError) return reply.badRequest(err.message);
+      throw err;
+    }
+  });
+
+  /**
+   * Propone las tareas iniciales del proyecto. No las guarda: el usuario las
+   * revisa en el formulario y las confirma con POST /projects/:id/tasks/bulk.
+   */
+  app.post("/projects/:id/plan", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { model } = PlanInput.parse(req.body ?? {});
+
+    const project = await db.project.findUnique({
+      where: { id },
+      include: { claudeMd: true },
     });
+    if (!project) return reply.notFound();
+
+    try {
+      return await planInitialTasks({
+        projectId: project.id,
+        name: project.name,
+        description: project.description ?? "",
+        repoPath: project.repoPath,
+        claudeMdContent: project.claudeMd?.content ?? null,
+        model,
+      });
+    } catch (err) {
+      if (err instanceof PlanError) return reply.badRequest(err.message);
+      throw err;
+    }
+  });
+
+  app.delete("/projects/:id/plan", async (req) => {
+    const { id } = req.params as { id: string };
+    return { cancelled: cancelPlan(id) };
   });
 
   app.patch("/projects/:id", async (req) => {

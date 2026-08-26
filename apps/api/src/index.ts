@@ -20,6 +20,7 @@ import { queueRoutes } from "./routes/queue.js";
 import { runRoutes } from "./routes/runs.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
+import { fsRoutes } from "./routes/fs.js";
 
 const app = Fastify({ logger: { level: "info" } });
 
@@ -50,6 +51,7 @@ await app.register(queueRoutes);
 await app.register(runRoutes);
 await app.register(statsRoutes);
 await app.register(workspaceRoutes);
+await app.register(fsRoutes);
 
 app.get("/health", async () => ({ ok: true, time: new Date().toISOString() }));
 

@@ -22,6 +22,7 @@ import {
 import {
   isActiveRun,
   type BoardEvent,
+  type PlanEvent,
   type RunEvent,
   type RunStatus,
 } from "@/lib/types";
@@ -240,4 +241,66 @@ export function useRunStream(runId: string | null) {
   }, [runId]);
 
   return { lines, tokens, status };
+}
+
+const MAX_PLAN_ACTIVITY = 6;
+
+/**
+ * Actividad del planificador mientras propone el backlog inicial. No es un log:
+ * el usuario está esperando delante del formulario y lo único que necesita es
+ * ver que algo se mueve, así que solo mantenemos las últimas líneas legibles.
+ */
+export function usePlanStream(projectId: string | null, active: boolean) {
+  const [activity, setActivity] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!projectId || !active) return;
+    setActivity([]);
+
+    const source = new EventSource(sseUrl(`/projects/${projectId}/plan/stream`));
+
+    source.onmessage = (event) => {
+      let parsed: PlanEvent;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+
+      const line = describePlanEvent(parsed);
+      if (!line) return;
+      setActivity((current) => [...current, line].slice(-MAX_PLAN_ACTIVITY));
+    };
+
+    source.onerror = () => {};
+
+    return () => source.close();
+  }, [projectId, active]);
+
+  return activity;
+}
+
+/** Traduce un evento de stream-json a una línea que se pueda enseñar. */
+function describePlanEvent(event: PlanEvent): string | null {
+  if (event.type === "log") return event.line.trim() || null;
+  if (event.type !== "stream") return null;
+
+  const data = event.data as {
+    type?: string;
+    message?: { content?: { type?: string; text?: string; name?: string; input?: Record<string, unknown> }[] };
+  };
+
+  if (data.type === "system") return "Leyendo el proyecto…";
+  if (data.type !== "assistant") return null;
+
+  for (const block of data.message?.content ?? []) {
+    if (block.type === "tool_use") {
+      const target = block.input?.file_path ?? block.input?.pattern ?? block.input?.path;
+      return target ? `${block.name}: ${String(target)}` : `${block.name}…`;
+    }
+    if (block.type === "text" && block.text?.trim()) {
+      return block.text.trim().replace(/\s+/g, " ").slice(0, 120);
+    }
+  }
+  return null;
 }
