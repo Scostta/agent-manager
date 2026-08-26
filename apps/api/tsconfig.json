@@ -14,8 +14,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["src/**/*", "prisma/**/*"],
-  // Los tests se typechequean con `pnpm typecheck`, pero no tienen por qué
-  // acabar en dist: el build es solo lo que corre en producción.
-  "exclude": ["src/**/*.test.ts"]
+  "include": ["src/**/*", "prisma/**/*"]
 }

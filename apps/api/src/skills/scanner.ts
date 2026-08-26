@@ -8,6 +8,8 @@ import { db } from "../db.js";
 import { config } from "../config.js";
 import { toPosix } from "../lib/paths.js";
 
+import type { FSWatcher } from "chokidar";
+
 async function findSkillFiles(root: string): Promise<string[]> {
   const results: string[] = [];
   try {
@@ -106,7 +108,7 @@ function isSkillFile(filePath: string): boolean {
  * nada y los cambios en disco no se reindexaban nunca. Vigilamos los
  * directorios raíz y filtramos por nombre.
  */
-export function watchSkills(): void {
+export function watchSkills(): FSWatcher {
   const watcher = chokidar.watch(config.skillsPaths, {
     ignoreInitial: true,
     // Los directorios tienen que pasar el filtro o no se recorrerían.
@@ -138,4 +140,8 @@ export function watchSkills(): void {
     );
   });
   watcher.on("error", (err) => console.warn("[skills] watcher:", err));
+
+  // Devolverlo permite cerrarlo: si no, el watcher mantiene vivo el event loop
+  // y ni el shutdown de la API ni un proceso de test terminan solos.
+  return watcher;
 }

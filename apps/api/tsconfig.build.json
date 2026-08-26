@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  // El build es solo lo que corre en producción: ni los tests ni el arnés que
+  // les monta la SQLite temporal tienen que acabar en dist.
+  "exclude": ["src/**/*.test.ts", "src/test/**"]
+}

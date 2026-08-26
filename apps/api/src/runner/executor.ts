@@ -19,6 +19,15 @@ import { describeRateLimit, detectRateLimit, type RateLimitHit } from "./rateLim
 const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
 
 /**
+ * Único punto por el que se lanza el CLI, aislado para poder sustituirlo en los
+ * tests: en Windows un CLI falso no se puede spawnear sin shell (un .cmd no es
+ * ejecutable directo), y lanzar el de verdad cuesta dinero y minutos. Lo que se
+ * prueba sustituyéndolo es lo que de verdad se rompe: el parseo del
+ * stream-json, el recuento de tokens y en qué estado acaban run y task.
+ */
+export const runtime = { spawn };
+
+/**
  * En Windows matamos con `taskkill`, que no deja señal: el proceso sale con
  * code != 0 y signal null, indistinguible de un fallo real. Marcamos la run
  * antes de matarla para poder clasificar el exit como 'cancelled'.
@@ -157,7 +166,7 @@ export async function executeTaskRun(
     "--permission-mode", "acceptEdits",
   ];
 
-  const child = spawn(config.claudeCli, args, {
+  const child = runtime.spawn(config.claudeCli, args, {
     cwd: workspacePath,
     env: childEnv(authMode),
     ...spawnOptions(),
