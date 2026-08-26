@@ -106,6 +106,65 @@ Los tests se validan reintroduciendo el bug que cubren: si el test sigue en
 verde con el bug dentro, no cuenta. Así apareció el hueco del reaper (faltaba el
 caso mixto: historial y huérfana conviviendo en la misma BD).
 
+## Fase 5 — Candidatos (nada empezado)
+
+Ordenados por lo que aportan. Salieron de revisar el código, no de una lluvia de
+ideas: cada uno apunta al sitio concreto que lo justifica.
+
+### 1. Continuar una sesión en vez de relanzarla
+
+Hoy cada run es un `-p` de un solo tiro, y los tres modos de retry (`wait`,
+`api_key`, `now`) relanzan desde cero: el agente vuelve a leerse el repo y se
+paga otra vez. Pero al revisar un diff lo natural es "casi, pero cambia X", y
+para eso hay que crear otra task o reintentar entera.
+
+El CLI acepta `--resume <sessionId>` y el `session_id` ya llega en el evento
+`init` del stream-json — simplemente no se guarda. Serían: una columna en
+`TaskRun`, guardarlo al parsear, y un botón "Seguir con instrucciones" en el
+visor de run. **Toca el schema de Prisma: hablarlo antes.**
+
+Es el cambio que más tiempo y dinero ahorra por línea escrita.
+
+### 2. Qué herramientas puede usar cada agente
+
+Todas las runs salen con `--permission-mode acceptEdits` y sin `--allowedTools`
+(`executor.ts`), así que cualquier agente puede ejecutar bash arbitrario en su
+workspace. Un agente revisor o documentador debería poder ser solo lectura; el
+precedente ya existe: el planificador corre con `--allowedTools Read,Glob,Grep`.
+Un campo en `Agent` y un arg más en el spawn.
+
+### 3. Decidir qué es `requiredSkillIds`
+
+Se guarda, se valida y se pinta en la tarjeta y el drawer, y **no lo consume
+nadie**: el executor inyecta las skills del *agente* (`agent.skills`), no las
+que la task declara requerir. Marcar una skill en una task hoy no cambia nada de
+lo que ve el agente.
+
+O se conecta (que las requeridas se inyecten, o que avisen de que el agente
+asignado no las tiene) o se quita. Un campo decorativo en el modelo de dominio
+envenena las decisiones que vengan después. Esto es decidir, no construir.
+
+### 4. Avisar cuando una run termina
+
+Una run tarda minutos y el cockpit no avisa: sin la pestaña delante, no te
+enteras. Una notificación del navegador al pasar a `review` o `failed` basta.
+Orquestar agentes y tener que vigilarlos se contradice.
+
+### 5. Registrar el prompt que se envió
+
+`buildPrompt()` compone systemPrompt + task + skills, y el NDJSON solo guarda lo
+que devuelve el CLI. Cuando una run sale rara no hay forma de ver qué se le
+pidió. Escribirlo como primera línea del log y listo.
+
+### Menores
+
+- **Editar SKILL.md desde la UI.** CLAUDE.md sí se edita y el catálogo de skills
+  es solo lectura; el hot-reload del scanner ya lo soportaría.
+- **Export/backup.** Todo vive en un SQLite local: si se corrompe, se va el
+  historial de costes entero.
+- **Tests en `apps/web`.** Cero por ahora. Hay lógica pura sin cubrir, como la
+  reindexación de dependencias al borrar una task en el wizard.
+
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 
 - Multi-tenancy.
