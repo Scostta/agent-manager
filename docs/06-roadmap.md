@@ -66,12 +66,23 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
     ahí versionaría el perfil entero y cada run lo copiaría al workspace.
 - ❌ Templates de proyecto — descartadas: las sustituye el alta guiada.
 
-## Lo que falta por probar
+## Tests
 
-Los tests cubren la lógica pura (`node:test`, sin dependencias nuevas). Sigue
-sin cubrirse lo que necesita BD o spawnear procesos — scanner de skills,
-executor y rutas —, que es justo donde salieron el bug del glob de chokidar y el
-del handler de spawn. Requiere montar una SQLite temporal por test.
+108 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+están cubiertos los tres sitios donde salieron los bugs caros:
+
+- **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
+  chokidar reaccionando a un `SKILL.md` nuevo.
+- **Executor**: el CLI se sustituye por un proceso simulado que escupe
+  stream-json (`runtime.spawn`). Cubre el recuento de tokens con deduplicación
+  por `message.id`, el coste autoritativo del evento `result`, los estados
+  finales de run y task, la cuota agotada y el binario ausente.
+- **Rutas**: `app.inject()` sobre `buildApp()`, con la BD real en una SQLite
+  temporal que se monta aplicando los `migration.sql` con `node:sqlite`
+  (`src/test/harness.ts`).
+
+Sin cubrir: la cola (`p-queue`), el GC de workspaces contra disco real y el
+planificador de extremo a extremo (su parseo sí está probado).
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

@@ -68,7 +68,10 @@ apps/
         claudeMd.ts
         sse.ts                   # /runs/:id/stream y /board/stream
         queue.ts                 # /queue/stats y /runs/:id/diff
-      index.ts                   # entry point
+      test/
+        harness.ts               # SQLite temporal para los tests con BD
+      app.ts                     # buildApp(): plugins + rutas, sin arrancar nada
+      index.ts                   # entry point: arranque real (reaper, scanner, GC, listen)
 
   web/                          # Frontend Next.js
     src/
@@ -130,16 +133,22 @@ apps/
 
 - **Runner:** `node:test` con `tsx`. Sin dependencias de test — no metas vitest
   ni jest sin permiso explícito.
-- **Dónde:** junto al código que prueban, como `foo.test.ts`. `tsconfig` los
-  excluye del build, pero sí entran en el typecheck.
-- **Qué se prueba:** lo que falla en silencio y sale caro. Hoy: el parser del
-  límite de cuota (`rateLimit`), las tarifas que alimentan el guard de
-  presupuesto (`pricing`), la copia de workspace (que no se filtren secretos ni
-  se copie a sí misma) y los helpers de git contra repos temporales de verdad
-  (diff con cambios sin commitear, merge, abort en conflicto).
-- **Qué no se prueba todavía:** nada que necesite BD o spawnear procesos —
-  scanner de skills, executor y rutas. Si lo abordas, monta una SQLite temporal
-  en lugar de mockear Prisma.
+- **Dónde:** junto al código que prueban, como `foo.test.ts`. `tsconfig.json`
+  los typechequea; `tsconfig.build.json` los saca del build junto con
+  `src/test/`.
+- **Qué se prueba:** lo que falla en silencio y sale caro. Lógica pura
+  (`rateLimit`, `pricing`, copia de workspace, helpers de git contra repos
+  temporales, dependencias, parseo del planificador, guard de rutas) y, con BD
+  de verdad, el scanner de skills, el executor y las rutas.
+- **Tests con BD:** `src/test/harness.ts` monta una SQLite temporal aplicando
+  los `migration.sql` con `node:sqlite`. **Impórtalo siempre el primero**: fija
+  el entorno antes de que `config.ts` y `db.ts` se evalúen, y si `db.ts` carga
+  antes, el cliente se conecta al `dev.db` real. Nada de mockear Prisma.
+- **Tests del executor:** no se spawnea el CLI. `runtime.spawn` se sustituye por
+  un proceso simulado que escupe stream-json; lo que se prueba es el parseo, el
+  recuento de tokens y en qué estado acaban run y task.
+- **Rutas:** `app.inject()` sobre `buildApp()` (`src/app.ts`). `index.ts` es
+  solo el arranque de verdad — no lo importes desde un test o abrirá un puerto.
 - Un test que no falla cuando reintroduces el bug no vale: comprueba que falla
   antes de darlo por bueno.
 
