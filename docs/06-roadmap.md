@@ -68,7 +68,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-134 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+146 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
@@ -96,7 +96,15 @@ identity unknown" — el botón "Mergear en main" no funcionaba en ningún proye
 creado desde el alta guiada. Ambos reintentan ahora con una identidad de
 respaldo, igual que ya hacía el commit inicial.
 
-Sin cubrir: el scheduler de reintentos por cuota y el reaper de runs huérfanas.
+- **Scheduler de cuota**: que no programe a ciegas sin hora de reset, que
+  reintente al llegar la hora, que no duplique la run si ya la relanzaste a
+  mano, y que un reinicio de la API no pierda la espera.
+- **Reaper**: cierra las runs que quedaron vivas y devuelve sus tasks a `todo`
+  sin tocar el historial ni la columna donde tú las hayas dejado.
+
+Los tests se validan reintroduciendo el bug que cubren: si el test sigue en
+verde con el bug dentro, no cuenta. Así apareció el hueco del reaper (faltaba el
+caso mixto: historial y huérfana conviviendo en la misma BD).
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 
