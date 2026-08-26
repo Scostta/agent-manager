@@ -17,6 +17,12 @@ export type RunEvent =
   | { type: "status"; status: "running" | "succeeded" | "failed" | "cancelled" }
   | { type: "log"; line: string };
 
+/** Planificación de las tareas iniciales de un proyecto recién creado. */
+export type PlanEvent =
+  | { type: "stream"; data: unknown }
+  | { type: "log"; line: string }
+  | { type: "done"; cancelled: boolean };
+
 export type BoardEvent =
   | { type: "task_updated"; taskId: string }
   | { type: "task_created"; taskId: string }

@@ -192,3 +192,36 @@ function conflictedFiles(err: GitError): string[] {
 export function buildBranchName(taskId: string, runId: string): string {
   return `cockpit/task-${taskId}/run-${runId}`;
 }
+
+/** Identidad de respaldo: sin user.name/user.email globales, `git commit` falla. */
+const FALLBACK_IDENTITY = [
+  "-c", "user.name=Claude Cockpit",
+  "-c", "user.email=cockpit@localhost",
+];
+
+/**
+ * Inicializa un repo nuevo y le deja un commit. El commit no es cosmético:
+ * `git worktree add ... HEAD` necesita que HEAD exista, así que un repo recién
+ * inicializado y sin commits no puede lanzar ni una sola run.
+ */
+export async function initRepo(repoPath: string): Promise<void> {
+  // -b requiere git >= 2.28. En versiones viejas cae a la rama por defecto.
+  await execGit(repoPath, ["init", "-b", "main"]).catch(() =>
+    execGit(repoPath, ["init"]),
+  );
+  await execGit(repoPath, ["add", "-A"]);
+  const commit = ["commit", "--allow-empty", "-m", "Initial commit"];
+  try {
+    await execGit(repoPath, commit);
+  } catch (err) {
+    if (!isMissingIdentity(err)) throw err;
+    await execGit(repoPath, [...FALLBACK_IDENTITY, ...commit]);
+  }
+}
+
+function isMissingIdentity(err: unknown): boolean {
+  if (!(err instanceof GitError)) return false;
+  return /user\.email|user\.name|Author identity unknown|empty ident/i.test(
+    err.stderr + err.stdout,
+  );
+}

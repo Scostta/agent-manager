@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { Task } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db.js";
 import { bus } from "../bus.js";
@@ -23,6 +24,20 @@ const TaskInput = z.object({
   requiredSkillIds: z.array(z.string()).optional(),
   dependsOn: z.array(z.string()).optional(),
   priority: z.number().int().optional(),
+});
+
+const BulkTasksInput = z.object({
+  tasks: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().default(""),
+        assignedAgentId: z.string().nullable().optional(),
+        /** Índices dentro de este array, no ids: las tasks aún no existen. */
+        dependsOn: z.array(z.number().int()).default([]),
+      }),
+    )
+    .min(1),
 });
 
 const MoveInput = z.object({
@@ -118,6 +133,68 @@ export async function taskRoutes(app: FastifyInstance) {
     await syncTaskBlocking(task.id);
     bus.emit("board", { type: "task_created", taskId: task.id });
     return db.task.findUnique({ where: { id: task.id } });
+  });
+
+  /**
+   * Alta en bloque del backlog inicial de un proyecto. Las dependencias llegan
+   * como índices dentro del propio array porque quien las propone (el
+   * planificador) todavía no tiene ids que referenciar.
+   */
+  app.post("/projects/:projectId/tasks/bulk", async (req, reply) => {
+    const { projectId } = req.params as { projectId: string };
+    const body = BulkTasksInput.parse(req.body);
+
+    const project = await db.project.findUnique({ where: { id: projectId } });
+    if (!project) return reply.notFound();
+
+    const max = await db.task.aggregate({
+      where: { projectId, status: "todo" },
+      _max: { position: true },
+    });
+    let position = (max._max.position ?? -1) + 1;
+
+    // Dos pasadas: una fila no tiene id hasta que existe, así que las
+    // dependencias se escriben cuando ya están todas creadas.
+    const created: Task[] = [];
+    for (const item of body.tasks) {
+      created.push(
+        await db.task.create({
+          data: {
+            projectId,
+            title: item.title,
+            description: item.description,
+            assignedAgentId: item.assignedAgentId ?? null,
+            requiredSkillIds: "[]",
+            dependsOn: "[]",
+            priority: 0,
+            position: position++,
+          },
+        }),
+      );
+    }
+
+    for (const [index, item] of body.tasks.entries()) {
+      // Solo hacia atrás: así el grafo es acíclico por construcción y no hay
+      // que validar ciclos sobre filas que acabamos de crear.
+      const deps = [...new Set(item.dependsOn)]
+        .filter((dep) => dep >= 0 && dep < index)
+        .map((dep) => created[dep].id);
+      if (!deps.length) continue;
+      await db.task.update({
+        where: { id: created[index].id },
+        data: { dependsOn: JSON.stringify(deps) },
+      });
+    }
+
+    for (const task of created) {
+      await syncTaskBlocking(task.id);
+      bus.emit("board", { type: "task_created", taskId: task.id });
+    }
+
+    return db.task.findMany({
+      where: { id: { in: created.map((task) => task.id) } },
+      orderBy: { position: "asc" },
+    });
   });
 
   app.patch("/tasks/:id", async (req, reply) => {

@@ -16,6 +16,44 @@ export type Project = {
   taskCounts?: Partial<Record<TaskStatus, number>>;
 };
 
+/* ── Explorador de carpetas (GET /fs/*) ───────────────────────────────────── */
+
+export type DirEntry = { name: string; path: string; isGitRepo: boolean };
+
+export type DirListing = {
+  path: string;
+  name: string;
+  /** null en una raíz (`C:\`, `/`): no hay dónde subir. */
+  parent: string | null;
+  exists: boolean;
+  isGitRepo: boolean;
+  isEmpty: boolean;
+  /** "\\" o "/": el cliente compone rutas nuevas y no puede adivinarlo. */
+  separator: string;
+  entries: DirEntry[];
+};
+
+export type BrowseRoot = { name: string; path: string };
+
+export type ClaudeMdFile = { exists: boolean; path: string; content: string | null };
+
+/* ── Planificación del backlog inicial ────────────────────────────────────── */
+
+export type PlannedTask = {
+  title: string;
+  description: string;
+  /** Índices dentro del propio array: las tasks aún no existen en BD. */
+  dependsOn: number[];
+};
+
+export type PlanResult = {
+  tasks: PlannedTask[];
+  model: string;
+  tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  costUsd: number;
+  logPath: string;
+};
+
 export type Skill = {
   id: string;
   name: string;
@@ -229,6 +267,12 @@ export type RunEvent =
     }
   | { type: "status"; status: Exclude<RunStatus, "queued"> }
   | { type: "log"; line: string };
+
+/** Eventos de /projects/:id/plan/stream. Espejo de `PlanEvent` en bus.ts. */
+export type PlanEvent =
+  | { type: "stream"; data: unknown }
+  | { type: "log"; line: string }
+  | { type: "done"; cancelled: boolean };
 
 export type RunDiff = { branchName: string; base: string; diff: string };
 
