@@ -68,8 +68,8 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-108 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
-están cubiertos los tres sitios donde salieron los bugs caros:
+134 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
   chokidar reaccionando a un `SKILL.md` nuevo.
@@ -80,9 +80,23 @@ están cubiertos los tres sitios donde salieron los bugs caros:
 - **Rutas**: `app.inject()` sobre `buildApp()`, con la BD real en una SQLite
   temporal que se monta aplicando los `migration.sql` con `node:sqlite`
   (`src/test/harness.ts`).
+- **GC de workspaces**: la tabla de decisión aparte, y su ejecución contra disco
+  y git de verdad — que no borre cambios sin commitear, que conserve la rama
+  cuando es lo único que guarda el trabajo, y que pode el registro del worktree.
+- **Cola**: encolado, pausa, concurrencia en caliente y kill switch (que las
+  runs descartadas no se queden en `queued` y sus tasks vuelvan a `todo`).
+- **Planificador**: de extremo a extremo con el CLI simulado — backlog, log
+  NDJSON, binario ausente, respuesta sin JSON, cancelación y el candado que
+  impide dos planificaciones del mismo proyecto a la vez.
 
-Sin cubrir: la cola (`p-queue`), el GC de workspaces contra disco real y el
-planificador de extremo a extremo (su parseo sí está probado).
+Estos tests destaparon un bug de verdad: quien tiene la identidad de git
+configurada por repo y no en `--global` no tiene ninguna en los proyectos que
+crea el cockpit, así que `commitAll` y `mergeBranch` fallaban con "Author
+identity unknown" — el botón "Mergear en main" no funcionaba en ningún proyecto
+creado desde el alta guiada. Ambos reintentan ahora con una identidad de
+respaldo, igual que ya hacía el commit inicial.
+
+Sin cubrir: el scheduler de reintentos por cuota y el reaper de runs huérfanas.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

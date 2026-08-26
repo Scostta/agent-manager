@@ -13,6 +13,7 @@ import {
   currentBranch,
   diffWorktree,
   execGit,
+  initRepo,
   isBranchMerged,
   isWorkingTreeClean,
   mergeBranch,
@@ -166,5 +167,73 @@ describe("merge", () => {
     await assert.rejects(() => fs.access(path.join(repo, ".git", "MERGE_HEAD")));
 
     await removeWorktree(repo, wt, "cockpit/conflicto");
+  });
+});
+
+describe("sin identidad de git configurada", () => {
+  // Quien configura user.email por repo en vez de --global no tiene identidad
+  // ninguna en los proyectos que crea el cockpit, y ahí `git commit` falla con
+  // "Author identity unknown". Neutralizamos la config global y la del sistema
+  // para que el caso se reproduzca en cualquier máquina, tenga lo que tenga.
+  const saved = {
+    global: process.env.GIT_CONFIG_GLOBAL,
+    system: process.env.GIT_CONFIG_SYSTEM,
+  };
+
+  before(() => {
+    const inexistente = path.join(root, "no-hay-config");
+    process.env.GIT_CONFIG_GLOBAL = inexistente;
+    process.env.GIT_CONFIG_SYSTEM = inexistente;
+  });
+
+  after(() => {
+    if (saved.global === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = saved.global;
+    if (saved.system === undefined) delete process.env.GIT_CONFIG_SYSTEM;
+    else process.env.GIT_CONFIG_SYSTEM = saved.system;
+  });
+
+  test("initRepo deja el commit inicial igualmente", async () => {
+    const dir = path.join(root, `sin-identidad-init-${counter++}`);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "algo.txt"), "contenido\n");
+
+    await initRepo(dir);
+
+    // Sin HEAD no hay `git worktree add`, así que el proyecto no podría lanzar
+    // ni una run.
+    assert.equal((await execGit(dir, ["log", "--oneline"])).trim().split("\n").length, 1);
+  });
+
+  test("mergear la rama de una run tampoco necesita identidad", async () => {
+    const dir = path.join(root, `sin-identidad-merge-${counter++}`);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "base.txt"), "base\n");
+    await initRepo(dir);
+
+    const wt = path.join(root, `wt-sin-identidad-${counter++}`);
+    await addWorktree(dir, wt, "cockpit/sin-identidad");
+    await fs.writeFile(path.join(wt, "trabajo.txt"), "lo que hizo el agente\n");
+    await commitAll(wt, "cockpit: trabajo de la run");
+
+    // El merge --no-ff crea un commit: sin esto el botón falla justo al final,
+    // con el trabajo ya commiteado en la rama.
+    await mergeBranch(dir, "cockpit/sin-identidad", "Merge run");
+
+    assert.equal(await isBranchMerged(dir, "cockpit/sin-identidad", "main"), true);
+    assert.equal(await isWorkingTreeClean(dir), true);
+    await removeWorktree(dir, wt, "cockpit/sin-identidad");
+  });
+
+  test("commitAll commitea el trabajo suelto del agente", async () => {
+    const dir = path.join(root, `sin-identidad-commit-${counter++}`);
+    await fs.mkdir(dir, { recursive: true });
+    await initRepo(dir);
+    await fs.writeFile(path.join(dir, "trabajo.txt"), "lo que dejó el agente\n");
+
+    // Es lo que hace "Mergear en main" antes de mergear: si esto revienta, el
+    // botón no funciona en ningún proyecto creado por el cockpit.
+    assert.equal(await commitAll(dir, "cockpit: trabajo de la run"), true);
+    assert.equal(await isWorkingTreeClean(dir), true);
   });
 });
