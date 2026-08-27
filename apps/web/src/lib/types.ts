@@ -233,7 +233,8 @@ export type StatsSummary = {
   byModel: Breakdown[];
 };
 
-export type ClaudeMdScope = "global" | "project" | "agent";
+/** `global` se inyecta en todas las runs; `project`, solo en las de su proyecto. */
+export type ClaudeMdScope = "global" | "project";
 
 export type ClaudeMd = {
   id: string;

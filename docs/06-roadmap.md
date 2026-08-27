@@ -72,7 +72,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-204 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+221 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
@@ -105,6 +105,10 @@ respaldo, igual que ya hacía el commit inicial.
   mano, y que un reinicio de la API no pierda la espera.
 - **Reaper**: cierra las runs que quedaron vivas y devuelve sus tasks a `todo`
   sin tocar el historial ni la columna donde tú las hayas dejado.
+- **Inyección de CLAUDE.md**: que el global llegue de verdad al workspace (era
+  el bug), que vaya antes del de proyecto, que no machaque el del repo, que
+  reinyectar no acumule copias, y que sin nada que inyectar no se cree el
+  fichero. Y en la ruta, que no se cuelen dos globales por ningún camino.
 - **Herramientas por agente**: que sin listas no salga ningún flag (un
   `--allowedTools` vacío sería "ninguna herramienta"), que un JSON roto no tumbe
   la run, que un patrón con espacios no se parta en varios argv, que la
@@ -196,14 +200,41 @@ arranca también deje constancia: modelo, flags (sin el `-p`, que duplicaría el
 prompt), de qué run se retoma y el prompt entero. El visor la pinta como un
 bloque aparte; los logs viejos se leen igual.
 
-### Menores
+## Fase 6 — Campos que no hacían nada
 
-- **Editar SKILL.md desde la UI.** CLAUDE.md sí se edita y el catálogo de skills
-  es solo lectura; el hot-reload del scanner ya lo soportaría.
-- **Export/backup.** Todo vive en un SQLite local: si se corrompe, se va el
-  historial de costes entero.
-- **Tests en `apps/web`.** Cero por ahora. Hay lógica pura sin cubrir, como la
-  reindexación de dependencias al borrar una task en el wizard.
+Salió de revisar el proyecto al cerrar la Fase 5.
+
+### El scope `global` de CLAUDE.md no llegaba a ninguna run ✅
+
+`executor.ts` solo inyectaba `project.claudeMd`. Un documento global —"para
+todos los proyectos", según la propia UI— se guardaba, se editaba en Monaco y
+no lo veía ningún agente. Peor que un campo decorativo: el editor **creaba los
+documentos nuevos con scope global por defecto** y la lista los etiquetaba
+"Global", así que la etiqueta mentía y se tragaba en silencio lo que escribías.
+
+Ahora se inyecta en todas las runs, antes del bloque del proyecto para que lo
+específico pueda matizar lo general. Solo puede haber uno: con dos y sin un
+orden visible en la UI, qué acaba leyendo el agente sería un misterio, así que
+crear (o convertir) un segundo devuelve un 400 que dice qué hacer.
+
+El scope `agent` se quita, y este sí por redundante: el `systemPrompt` del
+agente ya es el sitio de las instrucciones propias de un agente, y nunca tuvo
+FK que lo enlazara.
+
+### Pendientes de la misma revisión
+
+- **`Agent.status`** (`idle | running | paused | disabled`): nadie lo escribe —el
+  Zod del PATCH ni lo acepta— y nadie lo lee. Una máquina de estados en el
+  modelo de dominio que no existe. Conectarlo o quitarlo.
+- **Borrar un proyecto deja su `ClaudeMd` huérfano.** Misma familia que las filas
+  de `AgentSkill` cuando desaparece un SKILL.md. Se ven en el editor como "Sin
+  asignar (project)".
+- **Tests en `apps/web`.** El primero que hace falta es `formatLogLine` del visor
+  de runs: traduce cada evento del stream-json a una línea legible, y es justo
+  lo que se rompe en silencio cuando el CLI cambia la forma de un evento.
+- **Export/backup** y **editar SKILL.md desde la UI**, que ya venían de la Fase 5.
+- **El aviso de run terminada no tiene replay**: una run que termine mientras el
+  `EventSource` reconecta no avisa nunca.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

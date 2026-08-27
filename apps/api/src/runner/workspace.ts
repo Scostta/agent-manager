@@ -41,7 +41,12 @@ export async function setupWorkspace(
 export async function injectWorkspaceResources(opts: {
   workspacePath: string;
   agentSkills: (AgentSkill & { skill: Skill })[];
-  claudeMdContent: string | null;
+  /**
+   * Los CLAUDE.md del cockpit que le tocan a esta run, en orden: primero el
+   * global (vale para todos los proyectos), luego el del proyecto. Los nulos y
+   * los vacíos se ignoran.
+   */
+  claudeMdSections: (string | null | undefined)[];
 }): Promise<void> {
   const skillsDir = path.join(opts.workspacePath, ".claude", "skills");
   await fs.mkdir(skillsDir, { recursive: true });
@@ -58,9 +63,11 @@ export async function injectWorkspaceResources(opts: {
     }
   }
 
-  if (opts.claudeMdContent) {
-    await mergeClaudeMd(opts.workspacePath, opts.claudeMdContent);
-  }
+  const sections = opts.claudeMdSections
+    .map((section) => section?.trim())
+    .filter((section): section is string => !!section);
+
+  if (sections.length) await mergeClaudeMd(opts.workspacePath, sections);
 }
 
 const COCKPIT_MARKER = "<!-- claude-cockpit -->";
@@ -72,10 +79,12 @@ const COCKPIT_MARKER = "<!-- claude-cockpit -->";
  */
 async function mergeClaudeMd(
   workspacePath: string,
-  cockpitContent: string,
+  cockpitSections: string[],
 ): Promise<void> {
   const target = path.join(workspacePath, "CLAUDE.md");
-  const section = `${COCKPIT_MARKER}\n${cockpitContent}`;
+  // Un único marcador para todas las secciones, y así el invariante es simple:
+  // todo lo que va detrás del marcador es nuestro y se puede reemplazar entero.
+  const section = [COCKPIT_MARKER, ...cockpitSections].join(`\n\n---\n\n`);
 
   let existing: string | null = null;
   try {
@@ -89,7 +98,10 @@ async function mergeClaudeMd(
     return;
   }
 
-  // Idempotente: si ya inyectamos antes, reemplazamos nuestra sección.
+  // Idempotente: si ya inyectamos antes, reemplazamos nuestra sección. Ojo,
+  // esto se lleva por delante cualquier cosa escrita después del marcador — que
+  // es justo lo que queremos en una continuación, que reinyecta sobre el
+  // workspace del padre.
   const markerIndex = existing.indexOf(COCKPIT_MARKER);
   const base = markerIndex === -1 ? existing : existing.slice(0, markerIndex);
   await fs.writeFile(target, `${base.trimEnd()}\n\n---\n\n${section}`);

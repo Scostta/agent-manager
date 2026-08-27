@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { setupWorkspace } from "./workspace.js";
+import { injectWorkspaceResources, setupWorkspace } from "./workspace.js";
 
 import type { Project, TaskRun } from "@prisma/client";
 
@@ -110,5 +110,91 @@ describe("setupWorkspace en modo copy", () => {
 
     assert.equal(result.branchName, null);
     assert.ok(result.workspacePath.includes("task-1"));
+  });
+});
+
+describe("inyección de CLAUDE.md", () => {
+  async function inject(workspacePath: string, sections: (string | null)[]): Promise<string> {
+    await injectWorkspaceResources({
+      workspacePath,
+      agentSkills: [],
+      claudeMdSections: sections,
+    });
+    return fs.readFile(path.join(workspacePath, "CLAUDE.md"), "utf8");
+  }
+
+  async function emptyWorkspace(name: string): Promise<string> {
+    const dir = path.join(root, name);
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
+  }
+
+  test("el global entra en el workspace, que es lo que no hacía antes", async () => {
+    const ws = await emptyWorkspace("solo-global");
+
+    const written = await inject(ws, ["Convenciones de todos mis proyectos."]);
+
+    assert.match(written, /Convenciones de todos mis proyectos\./);
+  });
+
+  test("global primero y proyecto después, para poder matizarlo", async () => {
+    const ws = await emptyWorkspace("orden");
+
+    const written = await inject(ws, ["SOY-EL-GLOBAL", "SOY-EL-PROYECTO"]);
+
+    assert.ok(
+      written.indexOf("SOY-EL-GLOBAL") < written.indexOf("SOY-EL-PROYECTO"),
+      "lo específico va después de lo general",
+    );
+  });
+
+  test("no machaca el CLAUDE.md que ya traiga el repo", async () => {
+    const ws = await emptyWorkspace("con-repo-md");
+    await fs.writeFile(path.join(ws, "CLAUDE.md"), "# Del repo\n\nNo me borres.\n");
+
+    const written = await inject(ws, ["Del cockpit"]);
+
+    assert.match(written, /No me borres\./);
+    assert.match(written, /Del cockpit/);
+  });
+
+  /**
+   * Una continuación reinyecta sobre el workspace del padre. Si cada sección
+   * llevara su propio marcador, reinyectar solo reemplazaría la primera y la
+   * otra se duplicaría en cada vuelta.
+   */
+  test("reinyectar reemplaza lo del cockpit en vez de acumularlo", async () => {
+    const ws = await emptyWorkspace("idempotente");
+    await fs.writeFile(path.join(ws, "CLAUDE.md"), "# Del repo\n");
+
+    await inject(ws, ["GLOBAL-V1", "PROYECTO-V1"]);
+    const written = await inject(ws, ["GLOBAL-V2", "PROYECTO-V2"]);
+
+    assert.equal(written.match(/GLOBAL-V1/g), null, "la versión vieja no se queda");
+    assert.equal(written.match(/PROYECTO-V1/g), null);
+    assert.equal(written.match(/GLOBAL-V2/g)?.length, 1, "y la nueva aparece una sola vez");
+    assert.equal(written.match(/PROYECTO-V2/g)?.length, 1);
+    assert.match(written, /# Del repo/, "lo del repo sobrevive a las reinyecciones");
+  });
+
+  test("sin nada que inyectar no se crea el fichero", async () => {
+    const ws = await emptyWorkspace("sin-nada");
+
+    await injectWorkspaceResources({
+      workspacePath: ws,
+      agentSkills: [],
+      // null cuando no hay global, "" cuando el documento existe pero está vacío.
+      claudeMdSections: [null, "   "],
+    });
+
+    await assert.rejects(() => fs.access(path.join(ws, "CLAUDE.md")));
+  });
+
+  test("si solo hay uno de los dos, no deja separadores sueltos", async () => {
+    const ws = await emptyWorkspace("solo-proyecto");
+
+    const written = await inject(ws, [null, "Solo el del proyecto"]);
+
+    assert.ok(!written.includes("---\n\n---"), "nada de bloques vacíos entre separadores");
   });
 });

@@ -701,14 +701,17 @@ checklists, etc.</code></pre>
       <table>
         <thead><tr><th>Scope</th><th>Cuándo se usa</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge badge-accent">global</span></td><td>Instrucciones generales para todos los proyectos</td></tr>
-          <tr><td><span class="badge badge-blue">project</span></td><td>Instrucciones específicas de un proyecto. Se inyectan como <code>CLAUDE.md</code> en la raíz del workspace al ejecutar cualquier tarea de ese proyecto</td></tr>
-          <tr><td><span class="badge badge-gray">agent</span></td><td>Instrucciones específicas de un agente (uso futuro)</td></tr>
+          <tr><td><span class="badge badge-accent">global</span></td><td>Instrucciones para todos los proyectos. Se inyectan en el workspace de <strong>todas</strong> las runs. Solo puede haber uno</td></tr>
+          <tr><td><span class="badge badge-blue">project</span></td><td>Instrucciones de un proyecto. Se inyectan solo en las runs de ese proyecto, después del global para poder matizarlo</td></tr>
         </tbody>
       </table>
     </div>
 
-    <p>El contenido del ClaudeMd de scope <code>project</code> se escribe literalmente en <code>{workspace}/CLAUDE.md</code> antes de lanzar el CLI, de modo que Claude Code lo lee automáticamente siguiendo su convención estándar.</p>
+    <p>Ambos se escriben en <code>{workspace}/CLAUDE.md</code> antes de lanzar el CLI, de modo que Claude Code los lee siguiendo su convención estándar. Si el repo ya traía su propio CLAUDE.md no se machaca: lo del cockpit se anexa en un bloque marcado con <code>&lt;!-- claude-cockpit --&gt;</code>, y reinyectar lo reemplaza en vez de acumularlo.</p>
+
+    <div class="callout-warn callout">
+      <p><strong>El scope <code>agent</code> ya no existe.</strong> Nunca lo consumió nadie, y el <code>systemPrompt</code> del agente ya es el sitio de las instrucciones propias de un agente: dos sitios para lo mismo solo sirven para preguntarse cuál gana.</p>
+    </div>
   </section>
 
   <!-- ── SCANNER ────────────────────────────────────────────────── -->
@@ -813,8 +816,8 @@ checklists, etc.</code></pre>
       <div class="flow-step">
         <div class="flow-num">7</div>
         <div class="flow-body">
-          <strong>Inyectar CLAUDE.md del proyecto</strong>
-          <p>Si el proyecto tiene un <code>ClaudeMd</code> asociado, se escribe su contenido en <code>{workspace}/CLAUDE.md</code>. Claude Code lo lee al arrancar.</p>
+          <strong>Inyectar los CLAUDE.md del cockpit</strong>
+          <p>Se escriben en <code>{workspace}/CLAUDE.md</code>, en orden: primero el de scope <code>global</code> si existe, después el del proyecto. Claude Code los lee al arrancar. Si el repo ya traía uno, se anexan al final en un bloque marcado en vez de sobreescribirlo.</p>
         </div>
       </div>
 

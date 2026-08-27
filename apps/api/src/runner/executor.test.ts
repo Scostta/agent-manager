@@ -727,3 +727,66 @@ describe("aviso de run terminada", () => {
     assert.equal(event?.runId, run.id);
   });
 });
+
+describe("CLAUDE.md que llega a la run", () => {
+  const OK = [{ type: "result", subtype: "success", is_error: false, result: "ok" }];
+
+  async function workspaceClaudeMd(runId: string): Promise<string> {
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    return fs.readFile(path.join(run.workspacePath, "CLAUDE.md"), "utf8");
+  }
+
+  /**
+   * El global no cuelga de ninguna FK, así que el executor tiene que ir a
+   * buscarlo. Sin esto se guardaba, se editaba en la UI con la etiqueta
+   * "Global"… y no lo veía ningún agente.
+   */
+  test("el global se inyecta aunque el proyecto no tenga el suyo", async () => {
+    const { run } = await seedRun();
+    await db.claudeMd.create({
+      data: { scope: "global", content: "REGLA-GLOBAL: no toques el .env" },
+    });
+    runtime.spawn = fakeCli({ lines: OK });
+
+    await executeTaskRun(run.id);
+
+    assert.match(await workspaceClaudeMd(run.id), /REGLA-GLOBAL/);
+  });
+
+  test("global y proyecto conviven, en ese orden", async () => {
+    const { run } = await seedRun();
+    const projectMd = await db.claudeMd.create({
+      data: { scope: "project", content: "REGLA-DEL-PROYECTO" },
+    });
+    const saved = await db.taskRun.findUniqueOrThrow({
+      where: { id: run.id },
+      include: { task: true },
+    });
+    await db.project.update({
+      where: { id: saved.task.projectId },
+      data: { claudeMdId: projectMd.id },
+    });
+    await db.claudeMd.create({ data: { scope: "global", content: "REGLA-GLOBAL" } });
+    runtime.spawn = fakeCli({ lines: OK });
+
+    await executeTaskRun(run.id);
+
+    const written = await workspaceClaudeMd(run.id);
+    assert.match(written, /REGLA-GLOBAL/);
+    assert.match(written, /REGLA-DEL-PROYECTO/);
+    assert.ok(
+      written.indexOf("REGLA-GLOBAL") < written.indexOf("REGLA-DEL-PROYECTO"),
+      "lo del proyecto va después para poder matizar lo global",
+    );
+  });
+
+  test("sin ningún CLAUDE.md del cockpit no se inventa uno", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({ lines: OK });
+
+    await executeTaskRun(run.id);
+
+    const saved = await db.taskRun.findUniqueOrThrow({ where: { id: run.id } });
+    await assert.rejects(() => fs.access(path.join(saved.workspacePath, "CLAUDE.md")));
+  });
+});

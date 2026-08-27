@@ -36,10 +36,14 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
 const SCOPE_VARIANT = {
   global: "accent",
   project: "blue",
-  agent: "orange",
 } as const;
 
-const SCOPES: ClaudeMdScope[] = ["global", "project", "agent"];
+const SCOPES: ClaudeMdScope[] = ["global", "project"];
+
+const SCOPE_HINT = {
+  global: "Se inyecta en el workspace de todas las runs, de cualquier proyecto.",
+  project: "Se inyecta solo en las runs de su proyecto. Se enlaza desde el proyecto; aquí solo se crea el documento.",
+} as const;
 
 const EDITOR_OPTIONS = {
   fontSize: 12,
@@ -107,13 +111,16 @@ function NewDocModal({
   open,
   onClose,
   onCreated,
+  globalTaken,
 }: {
   open: boolean;
   onClose: () => void;
   onCreated: (doc: ClaudeMd) => void;
+  /** Solo puede haber un global; con uno ya creado, el ámbito por defecto cambia. */
+  globalTaken: boolean;
 }): ReactElement {
   const toast = useToast();
-  const [scope, setScope] = useState<ClaudeMdScope>("global");
+  const [scope, setScope] = useState<ClaudeMdScope>(globalTaken ? "project" : "global");
   const [filePath, setFilePath] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -160,15 +167,13 @@ function NewDocModal({
           inputSize="md"
         >
           {SCOPES.map((s) => (
-            <option key={s} value={s}>
+            <option key={s} value={s} disabled={s === "global" && globalTaken}>
               {s}
+              {s === "global" && globalTaken ? " (ya existe)" : ""}
             </option>
           ))}
         </Select>
-        <span className="text-xs text-txt-3">
-          El de ámbito <span className="font-mono">project</span> se enlaza desde el proyecto;
-          aquí solo se crea el documento.
-        </span>
+        <span className="text-xs text-txt-3">{SCOPE_HINT[scope]}</span>
       </label>
 
       <label className="flex flex-col gap-1.5">
@@ -198,6 +203,8 @@ export function ClaudeMdEditor(): ReactElement {
   const [saving, setSaving] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<ClaudeMd | null>(null);
+
+  const globalTaken = !!docs?.some((doc) => doc.scope === "global");
 
   const selected = useMemo(
     () => docs?.find((doc) => doc.id === selectedId) ?? docs?.[0] ?? null,
@@ -260,7 +267,7 @@ export function ClaudeMdEditor(): ReactElement {
           <p className="text-sm text-txt-3">
             {isLoading
               ? "Cargando…"
-              : `${docs?.length ?? 0} ${docs?.length === 1 ? "documento" : "documentos"} · el del proyecto se inyecta en cada workspace`}
+              : `${docs?.length ?? 0} ${docs?.length === 1 ? "documento" : "documentos"} · el global va en todas las runs; el de un proyecto, solo en las suyas`}
           </p>
         </div>
         <Button variant="primary" size="sm" icon="plus" onClick={() => setShowNew(true)}>
@@ -368,6 +375,7 @@ export function ClaudeMdEditor(): ReactElement {
 
       <NewDocModal
         open={showNew}
+        globalTaken={globalTaken}
         onClose={() => setShowNew(false)}
         onCreated={(doc) => {
           void mutate(keys.claudeMd);

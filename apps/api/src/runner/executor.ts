@@ -149,12 +149,17 @@ export async function executeTaskRun(
     ? { workspacePath: parent.workspacePath, branchName: parent.branchName }
     : await setupWorkspace(project, run, config.workspacesRoot);
 
+  // El global vale para todos los proyectos y no cuelga de ninguna FK, así que
+  // hay que ir a buscarlo aparte. Solo puede haber uno.
+  const globalClaudeMd = await db.claudeMd.findFirst({ where: { scope: "global" } });
+
   // Idempotente: en una continuación las skills ya están enlazadas y el
   // CLAUDE.md inyectado, pero repetirlo cuesta nada y cubre que hayan cambiado.
   await injectWorkspaceResources({
     workspacePath,
     agentSkills: agent.skills,
-    claudeMdContent: project.claudeMd?.content ?? null,
+    // El orden importa: lo del proyecto va después para poder matizar lo global.
+    claudeMdSections: [globalClaudeMd?.content, project.claudeMd?.content],
   });
 
   const skillNames = agent.skills.map((s) => s.skill.name);
