@@ -126,7 +126,7 @@ apps/
 - **Skill** → un `SKILL.md` indexado del filesystem. **Nunca guardamos el contenido en BD, solo ruta + hash SHA256.** Si el usuario edita un SKILL.md en disco, el scanner (chokidar) lo detecta y actualiza.
 - **Task** → unidad del kanban. Estados: `todo | in_progress | review | done | blocked`. Puede tener `dependsOn` (otras tasks). Las skills no se declaran aquí: las trae el `Agent` que la ejecuta.
 - **TaskRun** → una ejecución concreta de una Task por un Agent. Separada de Task adrede: permite reintentos y auditoría de tokens. Estados: `queued | running | succeeded | failed | cancelled`. Guarda `branchName` si la estrategia es worktree, y el `sessionId` del CLI para poder retomarla. Una run con `resumedFromId` continúa la sesión de otra: comparte su workspace y su rama, y por eso no los limpia.
-- **ClaudeMd** → contenido markdown con scope `global | project | agent`. El del proyecto se inyecta como `CLAUDE.md` en el workspace de cada run.
+- **ClaudeMd** → contenido markdown con scope `global | project`. El global (solo puede haber uno) se inyecta en el workspace de **todas** las runs; el de un proyecto, solo en las suyas, y va después para poder matizarlo. Hubo un scope `agent` que no consumía nadie: el `systemPrompt` del agente ya es ese sitio.
 
 ## Flujo crítico: ejecución de una task
 
@@ -135,7 +135,7 @@ apps/
 2. Worker toma la run → `executor.executeTaskRun(runId)`:
    a. `setupWorkspace()` → si worktree: `git worktree add`. Si copy: `copyDirShallow`.
       Salvo que sea una continuación: esa hereda el workspace del padre.
-   b. `injectWorkspaceResources()` → symlinks de skills (junction en Windows, dir en Unix) + CLAUDE.md.
+   b. `injectWorkspaceResources()` → symlinks de skills (junction en Windows, dir en Unix) + los CLAUDE.md del cockpit: primero el global, luego el del proyecto, todos en un único bloque marcado dentro del que ya trajera el repo.
    c. Construye el prompt (systemPrompt + task + lista de skills). Al retomar,
       solo las instrucciones nuevas: el resto ya está en la sesión.
    d. Escribe la primera línea del log: con qué se lanza (modelo, flags, prompt).

@@ -90,12 +90,25 @@ usó, no por la que le da nombre.
 
 ## Merge de CLAUDE.md
 
-Si el repo ya trae su propio `CLAUDE.md`, **no se sobreescribe**: el contenido del
-cockpit se anexa al final en una sección marcada con `<!-- claude-cockpit -->`.
-La operación es idempotente — reinyectar reemplaza esa sección, no la duplica.
+Al workspace de cada run se inyectan los CLAUDE.md que le tocan, en este orden:
 
-El `ClaudeMd` de scope `project` se vincula escribiendo `claudeMdId` en el
-proyecto (`PATCH /projects/:id`).
+1. El de scope `global`, si existe. Vale para todas las runs de cualquier
+   proyecto y solo puede haber uno. No cuelga de ninguna FK, así que el executor
+   va a buscarlo con un `findFirst`.
+2. El de scope `project` del proyecto de la task, vinculado por
+   `Project.claudeMdId` (se escribe desde `PATCH /projects/:id`).
+
+Lo específico va después de lo general, para que el proyecto pueda matizar lo
+global.
+
+Si el repo ya trae su propio `CLAUDE.md`, **no se sobreescribe**: lo del cockpit
+se anexa al final en un único bloque marcado con `<!-- claude-cockpit -->`. Un
+solo marcador para las dos secciones, y así el invariante es simple: todo lo que
+va detrás es nuestro y se reemplaza entero. Por eso reinyectar es idempotente, y
+por eso una continuación —que reinyecta sobre el workspace del padre— no acumula
+copias vuelta tras vuelta.
+
+Sin nada que inyectar no se crea el fichero: un CLAUDE.md vacío solo sería ruido.
 
 ## Aviso al terminar
 

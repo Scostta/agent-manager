@@ -76,3 +76,6 @@ Base URL: `http://localhost:3001`.
 
 ## ClaudeMd
 - `GET/POST/PATCH/DELETE /claude-md` y `/claude-md/:id`
+- `scope`: `global` o `project`. Solo puede haber un `global`: crear o convertir
+  un segundo devuelve 400. El vínculo de un `project` se crea desde
+  `PATCH /projects/:id`, no desde aquí.

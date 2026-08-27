@@ -24,9 +24,12 @@ Ver `apps/api/prisma/schema.prisma`.
   padre**: el CLI indexa las sesiones por directorio, así que `--resume` solo las
   encuentra volviendo al mismo sitio. Por eso el dueño del workspace es la run
   que lo creó y es la única que lo limpia.
-- **ClaudeMd**: markdown con scope global/project/agent. La FK del scope `project`
+- **ClaudeMd**: markdown con scope `global` o `project`. La FK del scope `project`
   vive en `Project.claudeMdId`, así que el vínculo se crea desde
-  `PATCH /projects/:id`, no desde las rutas de `claude-md`.
+  `PATCH /projects/:id`, no desde las rutas de `claude-md`. El `global` no cuelga
+  de ninguna FK: es único y el executor va a buscarlo. La ruta rechaza con un 400
+  crear (o pasar a) un segundo global — con dos y sin orden visible, cuál gana
+  sería un misterio.
 
 ## SQLite notas
 
