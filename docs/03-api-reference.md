@@ -65,6 +65,15 @@ Base URL: `http://localhost:3001`.
   conversación de esta en su mismo workspace. 400 si no se puede retomar: aquí no
   se relanza de cero por lo bajini.
 
+## Backup
+- `GET /backup` — descarga una copia consistente de la BD (`VACUUM INTO`, no un
+  `copyFile`: es consistente aunque haya escrituras en marcha). Se genera en un
+  temporal y se borra al enviarla.
+- `GET /backup/history` — qué copias automáticas hay en `BACKUPS_ROOT`.
+
+No hay endpoint de restore, a propósito: parar la API, copiar el fichero encima
+de `dev.db` y arrancar.
+
 ## Queue
 - `GET /queue/stats` — `{ pending, waiting, concurrency }`
 

@@ -22,8 +22,20 @@ import Link from "next/link";
 import useSWR from "swr";
 
 import { useToast } from "@/components/ui/toast.client";
-import { collectWorkspaces, getWorkspaceReport } from "@/lib/api";
-import { formatBytes, formatClock, formatCost, formatDayShort, formatTokens } from "@/lib/format";
+import {
+  backupDownloadUrl,
+  collectWorkspaces,
+  getBackupHistory,
+  getWorkspaceReport,
+} from "@/lib/api";
+import {
+  formatBytes,
+  formatClock,
+  formatCost,
+  formatDayShort,
+  formatRelative,
+  formatTokens,
+} from "@/lib/format";
 import { usePlanUsage, useStats } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
@@ -534,6 +546,55 @@ function PlanCard({ plan }: { plan: PlanUsage }): ReactElement {
 }
 
 /**
+ * Todo el cockpit vive en un SQLite: proyectos, agentes y el historial entero
+ * de tokens y coste. Si ese fichero se corrompe no hay de dónde sacarlo, así
+ * que se copia sola al arrancar la API — y desde aquí te la puedes llevar.
+ */
+function BackupCard(): ReactElement {
+  const { data } = useSWR("/backup/history", () => getBackupHistory());
+  if (!data) return <></>;
+
+  const last = data.snapshots[0];
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border border-border-1 bg-bg-3 px-4 py-3">
+      <span className="flex items-center gap-2">
+        <Icon name="copy" size={13} className="text-txt-3" />
+        <span className="text-base font-medium text-txt-1">Copia de seguridad</span>
+      </span>
+
+      {last ? (
+        <span className="text-sm text-txt-2">
+          última hace {formatRelative(last.at)} ·{" "}
+          <span className="font-mono tabular-nums">{formatBytes(last.sizeBytes)}</span>
+          <span className="text-txt-3">
+            {" "}
+            · se guardan las {data.keep} últimas ({data.snapshots.length} ahora)
+          </span>
+        </span>
+      ) : (
+        <span className="text-sm text-txt-3">
+          {data.keep > 0
+            ? "todavía no hay ninguna: se hace una al arrancar la API"
+            : "copia automática desactivada (BACKUP_KEEP=0)"}
+        </span>
+      )}
+
+      {/* Descarga directa del navegador: no pasa por el cliente HTTP porque lo
+          que llega es un fichero binario, no JSON. */}
+      <a
+        href={backupDownloadUrl()}
+        download
+        className="ml-auto flex items-center gap-1.5 rounded-md border border-border-2 bg-bg-4 px-2.5 py-1 text-sm text-txt-2 transition-colors hover:border-border-3 hover:text-txt-1"
+      >
+        <Icon name="archive" size={11} />
+        Descargar ahora
+      </a>
+    </div>
+  );
+}
+
+/**
  * Disco que ocupan los workspaces y qué parte se puede recuperar. El GC corre
  * solo cada pocas horas; esto es para verlo y para forzarlo.
  */
@@ -646,6 +707,7 @@ export function DashboardView(): ReactElement {
       {plan && (
         <div className="mb-4 flex flex-col gap-3">
           <PlanCard plan={plan} />
+          <BackupCard />
           <DiskCard />
         </div>
       )}

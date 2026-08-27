@@ -55,6 +55,16 @@ Los tipos exactos de cada uno están en `apps/api/src/bus.ts`.
 
 SQLite con Prisma. Fichero en `apps/api/prisma/dev.db`. Inspeccionable con `pnpm db:studio`.
 
+Ahí vive **todo**: proyectos, agentes, tasks y el historial entero de tokens y
+coste. Como no hay copia en ningún otro sitio, la API hace una al arrancar en
+`BACKUPS_ROOT` y conserva las `BACKUP_KEEP` últimas; `GET /backup` baja una
+cuando quieras. Se usa `VACUUM INTO` y no un `copyFile`: da un snapshot
+consistente aunque haya escrituras en marcha, y de paso compacta.
+
+Restaurar es manual a propósito — parar la API, copiar el fichero encima de
+`dev.db`, arrancar. Un endpoint que sobrescriba la BD viva desde una petición
+web es justo el tipo de cosa que no quieres tener a un clic.
+
 ## Estrategias de workspace
 
 Cada `TaskRun` obtiene un workspace aislado en `WORKSPACES_ROOT/{taskId}/{runId}/`. Cómo se construye depende del proyecto:
