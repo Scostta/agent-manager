@@ -20,7 +20,7 @@ import { useRuns } from "@/lib/hooks";
 import { isActiveRun, latestRun } from "@/lib/types";
 
 import type { ReactElement } from "react";
-import type { Agent, RunListItem, Skill, Task } from "@/lib/types";
+import type { Agent, RunListItem, Task } from "@/lib/types";
 
 const STATUS_BADGE = {
   todo: "default",
@@ -71,7 +71,6 @@ function PreviousRun({ run }: { run: RunListItem }): ReactElement {
 export function TaskDrawer({
   task,
   agents,
-  skills,
   busy,
   onClose,
   onRun,
@@ -84,7 +83,6 @@ export function TaskDrawer({
 }: {
   task: Task;
   agents: Agent[];
-  skills: Skill[];
   busy: boolean;
   onClose: () => void;
   onRun: (agentId: string) => void;
@@ -107,7 +105,6 @@ export function TaskDrawer({
   const blocking = task.dependsOn
     .map((id) => siblings.find((candidate) => candidate.id === id))
     .filter((dep): dep is Task => !!dep && dep.status !== "done");
-  const taskSkills = skills.filter((s) => task.requiredSkillIds.includes(s.id));
   const [agentId, setAgentId] = useState(task.assignedAgentId ?? "");
   const [elapsed, setElapsed] = useState(0);
 
@@ -179,19 +176,6 @@ export function TaskDrawer({
             </div>
           )}
         </div>
-
-        {taskSkills.length > 0 && (
-          <>
-            <Divider label="Skills" />
-            <div className="my-3 flex flex-wrap gap-1.5">
-              {taskSkills.map((skill) => (
-                <Chip key={skill.id} active>
-                  {skill.name}
-                </Chip>
-              ))}
-            </div>
-          </>
-        )}
 
         <Divider label="Depende de" />
         <div className="my-3 flex flex-col gap-1.5">

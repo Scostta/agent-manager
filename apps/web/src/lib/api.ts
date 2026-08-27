@@ -13,6 +13,7 @@ import type {
   QueueStats,
   RunDiff,
   RunList,
+  ResumeStatus,
   RetryMode,
   RunLog,
   RunStatus,
@@ -111,6 +112,9 @@ export type AgentInput = {
   systemPrompt: string;
   maxBudgetUsd?: number;
   skillIds?: string[];
+  /** Vacío o ausente = sin restricción. La API lo guarda como null. */
+  allowedTools?: string[];
+  disallowedTools?: string[];
 };
 
 export const createAgent = (input: AgentInput) =>
@@ -161,7 +165,6 @@ export const createTask = (input: {
   title: string;
   description?: string;
   assignedAgentId?: string | null;
-  requiredSkillIds?: string[];
   priority?: number;
 }) => api<Task>("/tasks", { method: "POST", ...json(input) });
 
@@ -177,8 +180,7 @@ export const updateTask = (
     title?: string;
     description?: string;
     assignedAgentId?: string | null;
-    requiredSkillIds?: string[];
-    dependsOn?: string[];
+      dependsOn?: string[];
     priority?: number;
   },
 ) => api<Task>(`/tasks/${id}`, { method: "PATCH", ...json(input) });
@@ -250,10 +252,19 @@ export const getPlanUsage = () => api<PlanUsage>("/stats/plan");
 
 /** Qué hacer con una run cortada por falta de cuota. */
 export const retryRun = (runId: string, mode: RetryMode) =>
-  api<{ mode: RetryMode; runId?: string; scheduledFor?: string }>(`/runs/${runId}/retry`, {
-    method: "POST",
-    ...json({ mode }),
-  });
+  api<{ mode: RetryMode; runId?: string; scheduledFor?: string; resumed?: boolean }>(
+    `/runs/${runId}/retry`,
+    { method: "POST", ...json({ mode }) },
+  );
+
+/* ── Continuar la sesión de una run ───────────────────────────────────────── */
+
+export const getRunResume = (runId: string) =>
+  api<ResumeStatus>(`/runs/${runId}/resume`);
+
+/** Encadena una run que sigue la conversación de esta, en su mismo workspace. */
+export const continueRun = (runId: string, prompt: string) =>
+  api<{ runId: string }>(`/runs/${runId}/resume`, { method: "POST", ...json({ prompt }) });
 
 /* ── Queue ────────────────────────────────────────────────────────────────── */
 

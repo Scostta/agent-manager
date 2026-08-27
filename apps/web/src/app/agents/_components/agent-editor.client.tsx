@@ -18,6 +18,7 @@ import {
 import { useToast } from "@/components/ui/toast.client";
 import { createAgent, updateAgent } from "@/lib/api";
 import { keys, useAgent, useSkills } from "@/lib/hooks";
+import { describeToolPolicy } from "@/lib/format";
 import { MODELS } from "@/lib/types";
 
 import type { ReactElement } from "react";
@@ -28,7 +29,32 @@ const EMPTY_FORM = {
   model: MODELS[0] as string,
   systemPrompt: "",
   maxBudgetUsd: "",
+  allowedTools: "",
+  disallowedTools: "",
 } as const;
+
+/**
+ * Atajos para los tres casos que se repiten. No son estados guardados: solo
+ * rellenan las dos listas, así que "a medida" es simplemente escribir en ellas.
+ */
+const TOOL_PRESETS = [
+  { label: "Todo", allowed: "", disallowed: "" },
+  { label: "Solo lectura", allowed: "Read, Glob, Grep", disallowed: "" },
+  { label: "Todo menos Bash", allowed: "", disallowed: "Bash" },
+] as const;
+
+/** "Read, Glob" → ["Read","Glob"]. Vacío es "sin restricción", no "ninguna". */
+function splitTools(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+}
+
+function sameTools(a: string, b: string): boolean {
+  // Una coma no puede aparecer dentro de un nombre: es el separador.
+  return splitTools(a).join(",") === splitTools(b).join(",");
+}
 
 function Field({
   label,
@@ -61,6 +87,8 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
     model: string;
     systemPrompt: string;
     maxBudgetUsd: string;
+    allowedTools: string;
+    disallowedTools: string;
   }>({ ...EMPTY_FORM });
   const [skillIds, setSkillIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -75,6 +103,8 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
       model: agent.model,
       systemPrompt: agent.systemPrompt,
       maxBudgetUsd: agent.maxBudgetUsd == null ? "" : String(agent.maxBudgetUsd),
+      allowedTools: agent.allowedTools.join(", "),
+      disallowedTools: agent.disallowedTools.join(", "),
     });
     setSkillIds((agent.skills ?? []).map(({ skillId }) => skillId));
   }, [agent]);
@@ -86,6 +116,12 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
     setSkillIds((current) =>
       current.includes(id) ? current.filter((s) => s !== id) : [...current, id],
     );
+
+  const toolPolicySummary = describeToolPolicy({
+    allowedTools: splitTools(form.allowedTools),
+    disallowedTools: splitTools(form.disallowedTools),
+  });
+  const toolPolicyEmpty = toolPolicySummary === "sin restricción";
 
   const budget = Number(form.maxBudgetUsd);
   const budgetInvalid = form.maxBudgetUsd !== "" && (Number.isNaN(budget) || budget <= 0);
@@ -102,6 +138,8 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
       systemPrompt: form.systemPrompt.trim(),
       maxBudgetUsd: form.maxBudgetUsd === "" ? undefined : budget,
       skillIds,
+      allowedTools: splitTools(form.allowedTools),
+      disallowedTools: splitTools(form.disallowedTools),
     };
 
     try {
@@ -219,6 +257,68 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
             mono
           />
         </Field>
+
+        <Divider label="Herramientas" />
+
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {TOOL_PRESETS.map((preset) => (
+              <Chip
+                key={preset.label}
+                active={
+                  sameTools(form.allowedTools, preset.allowed) &&
+                  sameTools(form.disallowedTools, preset.disallowed)
+                }
+                onClick={() =>
+                  setForm((current) => ({
+                    ...current,
+                    allowedTools: preset.allowed,
+                    disallowedTools: preset.disallowed,
+                  }))
+                }
+              >
+                {preset.label}
+              </Chip>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Permitidas" hint="Vacío = todas. Separadas por comas.">
+              <Input
+                value={form.allowedTools}
+                onChange={(e) => set("allowedTools", e.target.value)}
+                placeholder="Read, Glob, Grep"
+                inputSize="md"
+              />
+            </Field>
+
+            <Field label="Prohibidas" hint="Se descuentan de las permitidas.">
+              <Input
+                value={form.disallowedTools}
+                onChange={(e) => set("disallowedTools", e.target.value)}
+                placeholder="Bash"
+                inputSize="md"
+              />
+            </Field>
+          </div>
+
+          {/* Que "sin restricción" signifique bash arbitrario no es obvio hasta
+              que alguien te lo dice. */}
+          <p className="text-xs text-txt-3">
+            {toolPolicyEmpty ? (
+              <>
+                Sin restricción: este agente puede ejecutar bash arbitrario dentro de su
+                workspace. Para un revisor o un documentador, «Solo lectura» basta.
+              </>
+            ) : (
+              <>
+                Correrá con <span className="text-txt-2">{toolPolicySummary}</span>. Acepta
+                patrones del CLI, como{" "}
+                <span className="font-mono text-txt-2">Bash(git *)</span>.
+              </>
+            )}
+          </p>
+        </div>
 
         <Divider label="Skills habilitadas" />
 

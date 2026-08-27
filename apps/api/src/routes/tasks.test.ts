@@ -53,6 +53,25 @@ describe("POST /tasks", () => {
     assert.match(res.json().message, /title/);
   });
 
+  /**
+   * `requiredSkillIds` se quitó del modelo: las skills las trae el agente. Una
+   * pestaña abierta con el bundle viejo sigue mandándolo, y eso no puede
+   * tumbar el alta de una tarea.
+   */
+  test("un campo que ya no existe se ignora en vez de reventar", async () => {
+    const projectId = await seedProject();
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      payload: { projectId, title: "Con basura", requiredSkillIds: ["skill-fantasma"] },
+    });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.json().title, "Con basura");
+    assert.ok(!("requiredSkillIds" in res.json()), "y tampoco vuelve en la respuesta");
+  });
+
   test("nace bloqueada si depende de algo que no está hecho", async () => {
     const projectId = await seedProject();
     const base = await db.task.create({

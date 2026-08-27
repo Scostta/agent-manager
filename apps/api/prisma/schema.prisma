@@ -30,6 +30,11 @@ model Agent {
   model         String
   systemPrompt  String
   maxBudgetUsd  Float?
+  // Qué herramientas del CLI puede usar. JSON string, como el resto de arrays
+  // en SQLite. null (o vacío) = sin restricción, que es como corrían todas
+  // hasta ahora. Acepta patrones del CLI, p.ej. "Bash(git *)".
+  allowedTools    String?
+  disallowedTools String?
   status        String       @default("idle")
   skills        AgentSkill[]
   tasks         Task[]
@@ -69,7 +74,6 @@ model Task {
   priority         Int       @default(0)
   assignedAgentId  String?
   assignedAgent    Agent?    @relation(fields: [assignedAgentId], references: [id])
-  requiredSkillIds String    @default("[]")
   dependsOn        String    @default("[]")
   position         Int
   runs             TaskRun[]
@@ -101,11 +105,22 @@ model TaskRun {
   failureKind     String?
   // Cuándo vuelve a haber cuota, leído del mensaje del CLI.
   rateLimitResetAt DateTime?
+  // session_id que el CLI anuncia en el evento `init`. Es lo que permite
+  // seguir la conversación con `--resume` en vez de empezar de cero.
+  sessionId       String?
+  // Run cuya sesión continúa esta. Comparte con ella sesión, workspace y rama:
+  // por eso una continuación nunca limpia el workspace, no es suyo.
+  resumedFromId   String?
+  resumedFrom     TaskRun?  @relation("RunChain", fields: [resumedFromId], references: [id], onDelete: SetNull)
+  continuations   TaskRun[] @relation("RunChain")
+  // Las instrucciones con las que se retomó. null en una run de primera vuelta.
+  followUpPrompt  String?
   startedAt       DateTime  @default(now())
   endedAt         DateTime?
 
   @@index([taskId])
   @@index([status])
+  @@index([resumedFromId])
 }
 
 model ClaudeMd {

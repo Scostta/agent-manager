@@ -9,6 +9,7 @@ import {
   getRun,
   getRunBranch,
   getRunLog,
+  getRunResume,
   getStats,
   listAgents,
   listClaudeMd,
@@ -41,6 +42,7 @@ export const keys = {
   runs: (filters: RunFilters) => ["/runs", JSON.stringify(filters)] as const,
   runLog: (id: string) => `/runs/${id}/log`,
   runBranch: (id: string) => `/runs/${id}/branch`,
+  runResume: (id: string) => `/runs/${id}/resume`,
   runDiff: (id: string) => `/runs/${id}/diff`,
   stats: (days: number) => `/stats/summary?days=${days}`,
   plan: "/stats/plan",
@@ -89,6 +91,15 @@ export function useRuns(filters: RunFilters | null = {}) {
  */
 export function useRunBranch(runId: string | null) {
   return useSWR(runId ? keys.runBranch(runId) : null, () => getRunBranch(runId!));
+}
+
+/**
+ * Si la sesión de la run se puede retomar. Depende de que el workspace siga en
+ * disco, así que caduca sola: mergear o descartar lo dejan sin sitio donde
+ * volver.
+ */
+export function useRunResume(runId: string | null) {
+  return useSWR(runId ? keys.runResume(runId) : null, () => getRunResume(runId!));
 }
 
 /**

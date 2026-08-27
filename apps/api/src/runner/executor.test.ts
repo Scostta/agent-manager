@@ -10,6 +10,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 
 import { config } from "../config.js";
+import { bus } from "../bus.js";
 import { db } from "../db.js";
 import { executeTaskRun, runtime } from "./executor.js";
 
@@ -19,6 +20,10 @@ import type { Task, TaskRun } from "@prisma/client";
 assertUsingTestDb(config.databaseUrl);
 
 const realSpawn = runtime.spawn;
+
+/** Cómo se llamó al CLI: es donde se ve si una run retomó sesión o empezó de cero. */
+type SpawnCall = { args: string[]; cwd: string };
+let spawnCalls: SpawnCall[] = [];
 
 /**
  * Proceso simulado que escupe stream-json por stdout y termina. No es un mock
@@ -32,7 +37,8 @@ function fakeCli(opts: {
   /** Para simular un spawn que ni siquiera arranca (binario ausente). */
   spawnError?: NodeJS.ErrnoException;
 }): typeof runtime.spawn {
-  return (() => {
+  return (((_cmd: string, args: string[], spawnOpts: { cwd: string }) => {
+    spawnCalls.push({ args, cwd: spawnOpts.cwd });
     const child = new EventEmitter() as EventEmitter & {
       stdout: PassThrough;
       stderr: PassThrough;
@@ -69,7 +75,7 @@ function fakeCli(opts: {
     return child as unknown as ChildProcessWithoutNullStreams;
     // El tipo de `spawn` son seis sobrecargas según los stdio; el executor solo
     // usa la de stdio heredado, así que pasamos por unknown en vez de fingirlas.
-  }) as unknown as typeof runtime.spawn;
+  }) as unknown) as typeof runtime.spawn;
 }
 
 const ASSISTANT_USAGE = {
@@ -119,7 +125,10 @@ async function seedRun(): Promise<{ task: Task; run: TaskRun }> {
   return { task, run };
 }
 
-beforeEach(() => resetDb());
+beforeEach(async () => {
+  spawnCalls = [];
+  await resetDb();
+});
 
 afterEach(() => {
   runtime.spawn = realSpawn;
@@ -176,8 +185,8 @@ describe("executeTaskRun", () => {
     const events = log.trim().split("\n").map((line) => JSON.parse(line));
     assert.deepEqual(
       events.map((event) => event.type),
-      ["system", "assistant", "result"],
-      "el NDJSON guarda una línea por evento, en orden",
+      ["cockpit", "system", "assistant", "result"],
+      "el NDJSON guarda una línea por evento, en orden, tras la petición del cockpit",
     );
   });
 
@@ -291,5 +300,430 @@ describe("executeTaskRun", () => {
 
     const after = await db.task.findUniqueOrThrow({ where: { id: task.id } });
     assert.equal(after.status, "done", "solo se toca la task si sigue en in_progress");
+  });
+});
+
+describe("continuar una sesión", () => {
+  const SESSION = "sess_abc123";
+
+  /** Lo que se le pasó a `-p`: el prompt con el que arrancó esa ejecución. */
+  function promptOf(call: SpawnCall): string {
+    return call.args[call.args.indexOf("-p") + 1];
+  }
+
+  function resumeOf(call: SpawnCall): string | null {
+    const at = call.args.indexOf("--resume");
+    return at === -1 ? null : call.args[at + 1];
+  }
+
+  /** Una run terminada bien, con sesión guardada y su workspace en disco. */
+  async function seedFinishedRun(): Promise<TaskRun> {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: SESSION },
+        { type: "result", subtype: "success", is_error: false, result: "hecho" },
+      ],
+    });
+    await executeTaskRun(run.id);
+    return db.taskRun.findUniqueOrThrow({ where: { id: run.id } });
+  }
+
+  test("guarda el session_id que anuncia el CLI", async () => {
+    const saved = await seedFinishedRun();
+    assert.equal(saved.sessionId, SESSION, "sin esto no hay nada que retomar");
+  });
+
+  test("se queda con el primer session_id, aunque el CLI lo repita en cada evento", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: SESSION },
+        { type: "assistant", session_id: SESSION, message: { id: "msg_1", usage: ASSISTANT_USAGE } },
+        { type: "result", subtype: "success", is_error: false, result: "ok", session_id: SESSION },
+      ],
+    });
+
+    await executeTaskRun(run.id);
+
+    const saved = await db.taskRun.findUniqueOrThrow({ where: { id: run.id } });
+    assert.equal(saved.sessionId, SESSION);
+  });
+
+  test("una run que muere antes del init se queda sin sesión", async () => {
+    const { run } = await seedRun();
+    // Cuota agotada de entrada: el CLI ni llega a abrir conversación.
+    runtime.spawn = fakeCli({
+      lines: [
+        {
+          type: "result",
+          subtype: "error",
+          is_error: true,
+          result: "You've hit your session limit · resets 3:45pm",
+        },
+      ],
+      exitCode: 1,
+    });
+
+    await executeTaskRun(run.id);
+
+    const saved = await db.taskRun.findUniqueOrThrow({ where: { id: run.id } });
+    assert.equal(saved.sessionId, null, "sin session_id no se puede fingir que la hay");
+  });
+
+  test("una continuación retoma la sesión del padre en su mismo workspace", async () => {
+    const parent = await seedFinishedRun();
+    spawnCalls = [];
+
+    const child = await db.taskRun.create({
+      data: {
+        taskId: parent.taskId,
+        agentId: parent.agentId,
+        status: "queued",
+        workspacePath: "",
+        logPath: "",
+        resumedFromId: parent.id,
+        followUpPrompt: "Extrae la validación a su propio módulo.",
+      },
+    });
+
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: "sess_segunda_vuelta" },
+        { type: "result", subtype: "success", is_error: false, result: "hecho" },
+      ],
+    });
+    await executeTaskRun(child.id);
+
+    assert.equal(spawnCalls.length, 1);
+    const [call] = spawnCalls;
+    assert.equal(resumeOf(call), SESSION, "retoma la sesión del padre");
+    assert.equal(
+      promptOf(call),
+      "Extrae la validación a su propio módulo.",
+      "solo se le manda lo que falta: el contexto ya está en la sesión",
+    );
+    assert.ok(
+      !promptOf(call).includes("Haz la tarea."),
+      "repetir el systemPrompt sería pagar otra vez lo que ya sabe",
+    );
+    assert.equal(
+      call.cwd,
+      parent.workspacePath,
+      "el CLI indexa las sesiones por directorio: fuera de él no la encuentra",
+    );
+
+    const saved = await db.taskRun.findUniqueOrThrow({ where: { id: child.id } });
+    assert.equal(saved.workspacePath, parent.workspacePath);
+    assert.equal(
+      saved.sessionId,
+      "sess_segunda_vuelta",
+      "la siguiente vuelta retoma desde la sesión que devolvió esta, no desde la del padre",
+    );
+  });
+
+  test("una continuación que falla no borra el workspace del padre", async () => {
+    const parent = await seedFinishedRun();
+
+    const child = await db.taskRun.create({
+      data: {
+        taskId: parent.taskId,
+        agentId: parent.agentId,
+        status: "queued",
+        workspacePath: "",
+        logPath: "",
+        resumedFromId: parent.id,
+        followUpPrompt: "Cambia esto",
+      },
+    });
+
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "error", is_error: true, result: "explotó" }],
+      exitCode: 1,
+    });
+    await executeTaskRun(child.id);
+
+    assert.equal(
+      (await db.taskRun.findUniqueOrThrow({ where: { id: child.id } })).status,
+      "failed",
+    );
+    await fs.access(parent.workspacePath); // lanza si la limpieza se lo llevó
+  });
+
+  test("quedarse sin cuota conserva el workspace; un fallo normal no", async () => {
+    const cortada = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: SESSION },
+        {
+          type: "result",
+          subtype: "error",
+          is_error: true,
+          result: "You've hit your session limit · resets 3:45pm",
+        },
+      ],
+      exitCode: 1,
+    });
+    await executeTaskRun(cortada.run.id);
+
+    const sinCuota = await db.taskRun.findUniqueOrThrow({ where: { id: cortada.run.id } });
+    assert.equal(sinCuota.failureKind, "rate_limit");
+    // Es lo que el reintento necesita para retomar ahí mismo en vez de empezar
+    // de cero — y lo que el agente ya había hecho antes del corte.
+    await fs.access(sinCuota.workspacePath);
+
+    const rota = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "error", is_error: true, result: "explotó" }],
+      exitCode: 1,
+    });
+    await executeTaskRun(rota.run.id);
+
+    const fallida = await db.taskRun.findUniqueOrThrow({ where: { id: rota.run.id } });
+    assert.equal(fallida.failureKind, "error");
+    await assert.rejects(
+      () => fs.access(fallida.workspacePath),
+      "un fallo normal sí se limpia: no hay nada que retomar",
+    );
+  });
+});
+
+describe("herramientas del agente", () => {
+  function flagOf(args: string[], flag: string): string | null {
+    const at = args.indexOf(flag);
+    return at === -1 ? null : args[at + 1];
+  }
+
+  test("sin listas, el CLI sale sin flags de herramientas", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+
+    await executeTaskRun(run.id);
+
+    const [call] = spawnCalls;
+    assert.equal(flagOf(call.args, "--allowedTools"), null);
+    assert.equal(flagOf(call.args, "--disallowedTools"), null);
+  });
+
+  test("un agente de solo lectura sale con su lista de permitidas", async () => {
+    const { run } = await seedRun();
+    await db.agent.update({
+      where: { id: run.agentId },
+      data: { allowedTools: JSON.stringify(["Read", "Glob", "Grep"]) },
+    });
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+
+    await executeTaskRun(run.id);
+
+    assert.equal(flagOf(spawnCalls[0].args, "--allowedTools"), "Read,Glob,Grep");
+  });
+
+  test("la restricción también viaja al retomar una sesión", async () => {
+    const { run } = await seedRun();
+    await db.agent.update({
+      where: { id: run.agentId },
+      data: { disallowedTools: JSON.stringify(["Bash"]) },
+    });
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: "sess_x" },
+        { type: "result", subtype: "success", is_error: false, result: "ok" },
+      ],
+    });
+    await executeTaskRun(run.id);
+    spawnCalls = [];
+
+    const child = await db.taskRun.create({
+      data: {
+        taskId: run.taskId,
+        agentId: run.agentId,
+        status: "queued",
+        workspacePath: "",
+        logPath: "",
+        resumedFromId: run.id,
+        followUpPrompt: "Cambia esto",
+      },
+    });
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+    await executeTaskRun(child.id);
+
+    // Una continuación que perdiera la restricción sería la puerta de atrás:
+    // basta con retomar para recuperar bash.
+    assert.equal(flagOf(spawnCalls[0].args, "--disallowedTools"), "Bash");
+  });
+});
+
+describe("registro de lo que se le pidió al CLI", () => {
+  /** La primera línea del NDJSON, que la escribe el cockpit y no el CLI. */
+  async function requestLine(runId: string): Promise<any> {
+    const log = await fs.readFile(path.join(config.logsRoot, `${runId}.ndjson`), "utf8");
+    return JSON.parse(log.trim().split("\n")[0]);
+  }
+
+  test("el prompt queda en el log, que antes solo guardaba la respuesta", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+
+    await executeTaskRun(run.id);
+
+    const request = await requestLine(run.id);
+    assert.equal(request.type, "cockpit");
+    assert.equal(request.subtype, "request");
+    assert.equal(request.model, "claude-sonnet-5");
+    assert.match(request.prompt, /Haz la tarea\./, "lleva el systemPrompt del agente");
+    assert.match(request.prompt, /Hacer algo/, "y la task que se le asignó");
+    assert.equal(request.resumedFrom, null);
+  });
+
+  test("guarda los flags, pero no repite el prompt dentro de ellos", async () => {
+    const { run } = await seedRun();
+    await db.agent.update({
+      where: { id: run.agentId },
+      data: { allowedTools: JSON.stringify(["Read"]) },
+    });
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+
+    await executeTaskRun(run.id);
+
+    const request = await requestLine(run.id);
+    assert.ok(request.flags.includes("--allowedTools"), "se ve con qué permisos salió");
+    assert.ok(request.flags.includes("Read"));
+    assert.ok(!request.flags.includes("-p"), "el prompt va aparte");
+    assert.ok(
+      !request.flags.some((flag: string) => flag.includes("Haz la tarea")),
+      "duplicar el prompt en flags hace el log ilegible",
+    );
+  });
+
+  test("una continuación registra su prompt corto y de quién viene", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init", session_id: "sess_x" },
+        { type: "result", subtype: "success", is_error: false, result: "ok" },
+      ],
+    });
+    await executeTaskRun(run.id);
+
+    const child = await db.taskRun.create({
+      data: {
+        taskId: run.taskId,
+        agentId: run.agentId,
+        status: "queued",
+        workspacePath: "",
+        logPath: "",
+        resumedFromId: run.id,
+        followUpPrompt: "Extrae la validación.",
+      },
+    });
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+    await executeTaskRun(child.id);
+
+    const request = await requestLine(child.id);
+    assert.equal(request.prompt, "Extrae la validación.");
+    assert.equal(request.resumedFrom, run.id);
+    assert.ok(request.flags.includes("--resume"));
+  });
+
+  test("va la primera, antes que nada de lo que devuelva el CLI", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [
+        { type: "system", subtype: "init" },
+        { type: "result", subtype: "success", is_error: false, result: "ok" },
+      ],
+    });
+
+    await executeTaskRun(run.id);
+
+    const log = await fs.readFile(path.join(config.logsRoot, `${run.id}.ndjson`), "utf8");
+    const types = log.trim().split("\n").map((line) => JSON.parse(line).type);
+    assert.deepEqual(types, ["cockpit", "system", "result"]);
+  });
+
+  test("también se registra la run que ni siquiera arranca", async () => {
+    const { run } = await seedRun();
+    // Sin esto, el caso donde más falta hace saber qué se pidió —el que no
+    // deja ni una línea de salida— seguiría sin dejar rastro.
+    runtime.spawn = fakeCli({
+      spawnError: Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" }),
+    });
+
+    await executeTaskRun(run.id);
+
+    const request = await requestLine(run.id);
+    assert.equal(request.subtype, "request");
+  });
+});
+
+describe("aviso de run terminada", () => {
+  /** Recoge los `run_finished` que se emitan mientras corre `fn`. */
+  async function finishedEvents(fn: () => Promise<void>): Promise<any[]> {
+    const seen: any[] = [];
+    const handler = (event: any) => {
+      if (event?.type === "run_finished") seen.push(event);
+    };
+    bus.on("board", handler);
+    try {
+      await fn();
+    } finally {
+      bus.off("board", handler);
+    }
+    return seen;
+  }
+
+  test("lleva lo justo para pintar el aviso sin pedir nada más", async () => {
+    const { task, run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "success", is_error: false, result: "ok" }],
+    });
+
+    const [event, ...resto] = await finishedEvents(() => executeTaskRun(run.id));
+
+    assert.equal(resto.length, 0, "un aviso por run, no uno por evento");
+    assert.equal(event.runId, run.id);
+    assert.equal(event.taskId, task.id);
+    assert.equal(event.status, "succeeded");
+    // Sin estos dos, el navegador tendría que ir a buscarlos para el aviso.
+    assert.equal(event.taskTitle, "Hacer algo");
+    assert.equal(event.agentName, "agente");
+  });
+
+  test("una run fallida también avisa", async () => {
+    const { run } = await seedRun();
+    runtime.spawn = fakeCli({
+      lines: [{ type: "result", subtype: "error", is_error: true, result: "explotó" }],
+      exitCode: 1,
+    });
+
+    const [event] = await finishedEvents(() => executeTaskRun(run.id));
+
+    assert.equal(event.status, "failed");
+  });
+
+  test("la que ni arranca es la que más falta hace avisar", async () => {
+    const { run } = await seedRun();
+    // Si el binario no está, no hay log, no hay stream y la task vuelve a
+    // 'todo' sin que nadie se entere. Es el silencio más caro.
+    runtime.spawn = fakeCli({
+      spawnError: Object.assign(new Error("spawn claude ENOENT"), { code: "ENOENT" }),
+    });
+
+    const [event] = await finishedEvents(() => executeTaskRun(run.id));
+
+    assert.equal(event?.status, "failed");
+    assert.equal(event?.runId, run.id);
   });
 });

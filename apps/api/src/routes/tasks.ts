@@ -21,7 +21,6 @@ const TaskInput = z.object({
   title: z.string().min(1),
   description: z.string().default(""),
   assignedAgentId: z.string().nullable().optional(),
-  requiredSkillIds: z.array(z.string()).optional(),
   dependsOn: z.array(z.string()).optional(),
   priority: z.number().int().optional(),
 });
@@ -75,7 +74,7 @@ export async function taskRoutes(app: FastifyInstance) {
 
     const byTask = new Map(totals.map((row) => [row.taskId, row]));
 
-    // SQLite guarda estos campos como JSON string; el cliente espera arrays,
+    // SQLite guarda dependsOn como JSON string; el cliente espera un array,
     // igual que hace /skills con tags.
     return tasks.map((task) => {
       const sums = byTask.get(task.id);
@@ -86,7 +85,6 @@ export async function taskRoutes(app: FastifyInstance) {
 
       return {
         ...task,
-        requiredSkillIds: parseIdList(task.requiredSkillIds),
         dependsOn: parseIdList(task.dependsOn),
         totals: {
           inputTokens,
@@ -122,7 +120,6 @@ export async function taskRoutes(app: FastifyInstance) {
         title: body.title,
         description: body.description,
         assignedAgentId: body.assignedAgentId ?? null,
-        requiredSkillIds: JSON.stringify(body.requiredSkillIds ?? []),
         dependsOn: JSON.stringify(dependsOn),
         priority: body.priority ?? 0,
         position: (max._max.position ?? -1) + 1,
@@ -164,7 +161,6 @@ export async function taskRoutes(app: FastifyInstance) {
             title: item.title,
             description: item.description,
             assignedAgentId: item.assignedAgentId ?? null,
-            requiredSkillIds: "[]",
             dependsOn: "[]",
             priority: 0,
             position: position++,
@@ -218,9 +214,6 @@ export async function taskRoutes(app: FastifyInstance) {
       where: { id },
       data: {
         ...body,
-        requiredSkillIds: body.requiredSkillIds
-          ? JSON.stringify(body.requiredSkillIds)
-          : undefined,
         dependsOn: dependsOn ? JSON.stringify(dependsOn) : undefined,
       },
     });

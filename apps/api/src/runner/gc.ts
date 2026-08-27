@@ -14,9 +14,13 @@ import {
 
 /** Lo que el GC necesita saber de una carpeta para decidir. */
 export type WorkspaceFacts = {
-  /** null cuando ninguna run de la BD reclama esta carpeta. */
+  /**
+   * null cuando ninguna run de la BD reclama esta carpeta. `status` es el de la
+   * carpeta, no el de una fila: si una continuación está corriendo aquí, cuenta
+   * como activa aunque la run dueña acabase hace días.
+   */
   run: { status: string; strategy: "worktree" | "copy"; taskStatus: string } | null;
-  /** Desde que terminó la run, o desde la fecha de la carpeta si no hay run. */
+  /** Desde la última run que la usó, o desde la fecha de la carpeta si no hay ninguna. */
   ageDays: number;
   /** El directorio es un worktree de git válido, con su repo detrás. */
   isGitWorktree: boolean;
@@ -149,6 +153,19 @@ export async function scanWorkspaces(
         include: { task: { include: { project: true } } },
       });
 
+      // Una continuación corre en el workspace del padre: la carpeta se llama
+      // como el padre, pero quien la usó por última vez es la run más reciente
+      // de la cadena. Mirar solo al dueño la haría parecer vieja e inactiva.
+      const sharing = await db.taskRun.findMany({
+        where: { workspacePath: full },
+        select: { status: true, startedAt: true, endedAt: true },
+      });
+
+      const busy = sharing.some((sibling) => ACTIVE.has(sibling.status));
+      const lastUsed = sharing.length
+        ? Math.max(...sharing.map((s) => (s.endedAt ?? s.startedAt).getTime()))
+        : null;
+
       const strategy = run
         ? run.task.project.workspaceStrategy === "worktree"
           ? "worktree"
@@ -156,10 +173,19 @@ export async function scanWorkspaces(
         : null;
 
       const facts: WorkspaceFacts = {
-        run: run ? { status: run.status, strategy: strategy!, taskStatus: run.task.status } : null,
-        ageDays: run
-          ? (Date.now() - (run.endedAt ?? run.startedAt).getTime()) / DAY_MS
-          : await dirAgeDays(full),
+        run: run
+          ? {
+              status: busy ? "running" : run.status,
+              strategy: strategy!,
+              taskStatus: run.task.status,
+            }
+          : null,
+        ageDays:
+          lastUsed !== null
+            ? (Date.now() - lastUsed) / DAY_MS
+            : run
+              ? (Date.now() - (run.endedAt ?? run.startedAt).getTime()) / DAY_MS
+              : await dirAgeDays(full),
         isGitWorktree: false,
         branchMerged: false,
         hasUncommitted: false,

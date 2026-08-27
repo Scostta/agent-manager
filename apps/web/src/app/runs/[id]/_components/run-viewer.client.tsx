@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 
 import { Icon } from "@/components/ui/icon";
@@ -11,13 +12,28 @@ import {
   Button,
   Spinner,
   StatusDot,
+  Textarea,
   cn,
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
 import { Modal } from "@/components/ui/modal.client";
-import { cancelRun, discardRun, getRunDiff, mergeRun, retryRun } from "@/lib/api";
+import {
+  cancelRun,
+  continueRun,
+  discardRun,
+  getRunDiff,
+  mergeRun,
+  retryRun,
+} from "@/lib/api";
 import { formatClock, formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
-import { keys, useRun, useRunBranch, useRunLog, useRunStream } from "@/lib/hooks";
+import {
+  keys,
+  useRun,
+  useRunBranch,
+  useRunLog,
+  useRunResume,
+  useRunStream,
+} from "@/lib/hooks";
 
 import { isRateLimited } from "@/lib/types";
 
@@ -72,7 +88,7 @@ function Stat({
   );
 }
 
-type LogTone = "text" | "thinking" | "tool" | "result" | "error";
+type LogTone = "text" | "thinking" | "tool" | "result" | "error" | "request";
 
 const TONE_CLASS: Record<LogTone, string> = {
   text: "text-txt-2",
@@ -80,6 +96,7 @@ const TONE_CLASS: Record<LogTone, string> = {
   tool: "text-info",
   result: "text-txt-3",
   error: "text-danger",
+  request: "rounded-md border border-border-1 bg-bg-2 px-3 py-2 text-txt-3",
 };
 
 const MAX_TOOL_RESULT_CHARS = 500;
@@ -115,6 +132,19 @@ function formatLogLine(line: string): { text: string; tone: LogTone } | null {
   } catch {
     // stderr y cualquier salida que no sea JSON se muestran tal cual.
     return { text: line, tone: /error|failed|exception/i.test(line) ? "error" : "text" };
+  }
+
+  // La primera línea que escribe el cockpit, no el CLI: con qué se lanzó la
+  // run. Es lo único que explica una salida rara sin adivinar.
+  if (event.type === "cockpit" && event.subtype === "request") {
+    const head = [
+      `Lanzada con ${event.model}`,
+      event.resumedFrom ? `retomando ${String(event.resumedFrom).slice(0, 8)}` : null,
+      event.flags?.length ? event.flags.join(" ") : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return { text: `${head}\n\n${event.prompt}`, tone: "request" };
   }
 
   if (event.type === "assistant") {
@@ -361,12 +391,13 @@ function RateLimitBanner({
     setBusy(mode);
     try {
       const result = await retryRun(run.id, mode);
+      const how = result.resumed ? "Retomada donde se cortó" : "Relanzada";
       toast(
         result.scheduledFor
           ? `Reintento programado para ${formatClock(result.scheduledFor)}`
           : mode === "api_key"
-            ? "Relanzada con la API key (se factura aparte del plan)"
-            : "Relanzada",
+            ? `${how} con la API key (se factura aparte del plan)`
+            : how,
         "success",
       );
       onResolved();
@@ -422,6 +453,86 @@ function RateLimitBanner({
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * "Casi, pero cambia X". Al revisar un diff eso es lo natural, y hasta ahora
+ * obligaba a crear otra task o a reintentar la run entera: el agente volvía a
+ * leerse el repo desde cero y lo pagabas otra vez. Esto retoma su sesión en el
+ * mismo workspace y solo le dice lo que falta.
+ */
+function ContinueControl({ runId }: { runId: string }): ReactElement {
+  const { data: resume } = useRunResume(runId);
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  const toast = useToast();
+
+  const send = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      const { runId: nextRunId } = await continueRun(runId, prompt);
+      toast("Retomando la sesión con tus instrucciones", "success");
+      setOpen(false);
+      setPrompt("");
+      router.push(`/runs/${nextRunId}`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo continuar", "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Button
+        variant="default"
+        size="xs"
+        icon="refresh"
+        disabled={!resume?.canResume}
+        title={resume?.reason ?? undefined}
+        onClick={() => setOpen(true)}
+      >
+        Seguir con instrucciones
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Seguir con instrucciones"
+        width={520}
+        footer={
+          <>
+            <Button
+              variant="primary"
+              icon="play"
+              disabled={!prompt.trim()}
+              loading={busy}
+              onClick={() => void send()}
+            >
+              Retomar
+            </Button>
+            <Button variant="ghost" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-txt-2">
+          El agente sigue donde lo dejó, en este mismo workspace y con todo lo que ya
+          sabe de la tarea. Dile solo qué cambiar.
+        </p>
+        <Textarea
+          rows={5}
+          autoFocus
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Bien, pero extrae la validación a su propio módulo y añade un test del caso vacío."
+        />
+      </Modal>
+    </>
   );
 }
 
@@ -583,6 +694,18 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
                   </span>
                 </>
               )}
+              {run.resumedFromId && (
+                <>
+                  <span>·</span>
+                  <Link
+                    href={`/runs/${run.resumedFromId}`}
+                    className="flex items-center gap-1 transition-colors hover:text-txt-1"
+                  >
+                    <Icon name="refresh" size={9} />
+                    sigue a {run.resumedFromId.slice(0, 8)}
+                  </Link>
+                </>
+              )}
               {branch && !branch.merged && changesLabel(branch) && (
                 <>
                   <span>·</span>
@@ -609,18 +732,37 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
               Cancelar
             </Button>
           ) : (
-            branch && (
-              <IntegrationControls
-                runId={runId}
-                branch={branch}
-                onChanged={reloadIntegration}
-              />
-            )
+            <>
+              <ContinueControl runId={runId} />
+              {branch && (
+                <IntegrationControls
+                  runId={runId}
+                  branch={branch}
+                  onChanged={reloadIntegration}
+                />
+              )}
+            </>
           )}
         </div>
       </div>
 
       <RateLimitBanner run={run} onResolved={() => { void mutate(keys.run(runId)); void mutate(keys.plan); }} />
+
+      {/* El NDJSON solo guarda lo que devuelve el CLI, así que sin esto no
+          quedaría en ninguna parte qué se le pidió al retomar. */}
+      {run.followUpPrompt && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-border-1 bg-bg-2 px-5 py-2.5">
+          <Icon name="refresh" size={12} className="mt-0.5 shrink-0 text-txt-3" />
+          <div className="min-w-0">
+            <div className="text-2xs uppercase tracking-[.06em] text-txt-3">
+              Se retomó con
+            </div>
+            <p className="mt-0.5 whitespace-pre-wrap text-sm text-txt-2">
+              {run.followUpPrompt}
+            </p>
+          </div>
+        </div>
+      )}
 
       {!active && branch?.branchName && !branch.merged && branch.blockedReason && (
         <div className="flex shrink-0 items-start gap-2 border-b border-border-1 bg-warn-dim px-5 py-2 text-xs text-warn">

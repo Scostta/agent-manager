@@ -5,7 +5,13 @@ import { z } from "zod";
 
 import { db } from "../db.js";
 import { config } from "../config.js";
-import { cancelRun, enqueueTaskRun } from "../runner/queue.js";
+import {
+  ResumeUnavailableError,
+  cancelRun,
+  continueRun,
+  relaunchRun,
+} from "../runner/queue.js";
+import { resumeStatus } from "../runner/resume.js";
 import { cancelRetry, scheduleRetryAtReset } from "../runner/scheduler.js";
 import {
   IntegrationError,
@@ -17,6 +23,10 @@ import {
 
 const RetryInput = z.object({
   mode: z.enum(["wait", "api_key", "now"]),
+});
+
+const ContinueInput = z.object({
+  prompt: z.string().trim().min(1, "Escribe qué quieres que cambie."),
 });
 
 /** El visor solo pinta la cola del log; leer entero un NDJSON de una run larga
@@ -154,12 +164,38 @@ export async function runRoutes(app: FastifyInstance) {
       where: { id: runId },
       data: { failureKind: "rate_limit" },
     });
-    const newRunId = await enqueueTaskRun(
-      run.taskId,
-      run.agentId,
-      mode === "api_key" ? "api_key" : undefined,
-    );
-    return { mode, runId: newRunId };
+    const relaunched = await relaunchRun(runId, {
+      authMode: mode === "api_key" ? "api_key" : undefined,
+    });
+    return { mode, runId: relaunched.runId, resumed: relaunched.resumed };
+  });
+
+  /* ── Continuar la sesión de una run ─────────────────────────────────────── */
+
+  /**
+   * Si esta run se puede retomar con `--resume`. Lo decide el estado real —
+   * hay sesión guardada y el workspace sigue en disco — no la BD sola.
+   */
+  app.get("/runs/:runId/resume", async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const status = await resumeStatus(runId);
+    if (!status) return reply.notFound();
+    return status;
+  });
+
+  /**
+   * "Casi, pero cambia X". Encadena una run que sigue la conversación de esta
+   * en su mismo workspace, en vez de arrancar otra desde cero.
+   */
+  app.post("/runs/:runId/resume", async (req, reply) => {
+    const { runId } = req.params as { runId: string };
+    const { prompt } = ContinueInput.parse(req.body ?? {});
+    try {
+      return { runId: await continueRun(runId, prompt) };
+    } catch (err: any) {
+      if (err instanceof ResumeUnavailableError) return reply.badRequest(err.message);
+      return reply.internalServerError(`No se pudo continuar: ${err.message}`);
+    }
   });
 
   /* ── Integración del trabajo de la run ──────────────────────────────────── */

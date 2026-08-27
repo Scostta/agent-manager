@@ -30,7 +30,7 @@ import {
   runTask,
   updateTask,
 } from "@/lib/api";
-import { keys, useAgents, useBoardStream, useSkills, useTasks } from "@/lib/hooks";
+import { keys, useAgents, useBoardStream, useTasks } from "@/lib/hooks";
 import { isActiveRun } from "@/lib/types";
 
 import type { ReactElement } from "react";
@@ -58,7 +58,6 @@ function Column({
   label,
   color,
   tasks,
-  skills,
   compact,
   onSelect,
   onAdd,
@@ -67,7 +66,6 @@ function Column({
   label: string;
   color: string;
   tasks: Task[];
-  skills: ReturnType<typeof useSkills>["data"];
   compact: boolean;
   onSelect: (task: Task) => void;
   onAdd: (status: TaskStatus) => void;
@@ -97,7 +95,6 @@ function Column({
             <SortableTaskCard
               key={task.id}
               task={task}
-              skills={skills ?? []}
               compact={compact}
               onSelect={onSelect}
             />
@@ -127,7 +124,6 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
   const { mutate } = useSWRConfig();
   const { data: tasks, error, isLoading } = useTasks(project.id);
   const { data: agents } = useAgents();
-  const { data: skills } = useSkills();
   useBoardStream(project.id);
 
   const [board, setBoard] = useState<Task[]>([]);
@@ -351,7 +347,6 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
                   label={col.label}
                   color={col.color}
                   tasks={byStatus[col.id]}
-                  skills={skills}
                   compact={compact}
                   onSelect={(task) => setSelectedId(task.id)}
                   onAdd={setAddingTo}
@@ -362,7 +357,7 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
             <DragOverlay>
               {draggingTask && (
                 <div className="w-60 rotate-1 opacity-90">
-                  <TaskCardBody task={draggingTask} skills={skills ?? []} compact={compact} dragging />
+                  <TaskCardBody task={draggingTask} compact={compact} dragging />
                 </div>
               )}
             </DragOverlay>
@@ -380,7 +375,6 @@ export function KanbanView({ project }: { project: Project }): ReactElement {
         <TaskDrawer
           task={selected}
           agents={agents ?? []}
-          skills={skills ?? []}
           busy={busy}
           onClose={() => setSelectedId(null)}
           onRun={(agentId) =>

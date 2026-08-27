@@ -3,24 +3,44 @@ import { db } from "../db.js";
 import { bus } from "../bus.js";
 import { config } from "../config.js";
 import { executeTaskRun, killActiveRuns, type AuthMode } from "./executor.js";
+import { resumeStatus } from "./resume.js";
 
 const queue = new PQueue({ concurrency: config.queueConcurrency });
+
+export type EnqueueOptions = {
+  authMode?: AuthMode;
+  /**
+   * Run cuya sesión retoma esta. La nueva hereda su workspace y su rama — el
+   * CLI indexa las sesiones por directorio — y no las limpia al terminar.
+   */
+  resumeFromRunId?: string;
+  /** Instrucciones con las que se retoma. Solo tiene sentido con resumeFromRunId. */
+  followUpPrompt?: string;
+};
 
 export async function enqueueTaskRun(
   taskId: string,
   agentId: string,
-  authMode?: AuthMode,
+  options: EnqueueOptions = {},
 ): Promise<string> {
   const agent = await db.agent.findUnique({ where: { id: agentId } });
   if (!agent) throw new Error(`Agent ${agentId} no encontrado`);
 
   const run = await db.taskRun.create({
-    data: { taskId, agentId, status: "queued", workspacePath: "", logPath: "" },
+    data: {
+      taskId,
+      agentId,
+      status: "queued",
+      workspacePath: "",
+      logPath: "",
+      resumedFromId: options.resumeFromRunId ?? null,
+      followUpPrompt: options.followUpPrompt ?? null,
+    },
   });
 
   await db.task.update({ where: { id: taskId }, data: { status: "in_progress" } });
 
-  queue.add(() => executeTaskRun(run.id, authMode)).catch((err) => {
+  queue.add(() => executeTaskRun(run.id, options.authMode)).catch((err) => {
     console.error(`[queue] Error ejecutando run ${run.id}:`, err);
     db.taskRun
       .update({
@@ -37,6 +57,65 @@ export async function enqueueTaskRun(
 
   return run.id;
 }
+
+/** Lo que devuelve un relanzamiento: la run nueva y cómo se lanzó. */
+export type RelaunchResult = {
+  runId: string;
+  /** true si retomó la sesión anterior; false si empezó de cero. */
+  resumed: boolean;
+  /** Por qué no se pudo retomar. null cuando sí se retomó. */
+  reason: string | null;
+};
+
+/**
+ * Vuelve a lanzar una run terminada retomando su sesión si se puede. No es un
+ * error que no se pueda: quien la lanza (un reintento por cuota) quiere que la
+ * tarea avance, y empezar de cero sigue siendo avanzar. La diferencia es el
+ * dinero, así que se informa de cuál de las dos fue.
+ */
+export async function relaunchRun(
+  runId: string,
+  options: { authMode?: AuthMode } = {},
+): Promise<RelaunchResult> {
+  const run = await db.taskRun.findUnique({ where: { id: runId } });
+  if (!run) throw new Error(`Run ${runId} no encontrada`);
+
+  const check = await resumeStatus(runId);
+  const canResume = check?.canResume ?? false;
+
+  const newRunId = await enqueueTaskRun(run.taskId, run.agentId, {
+    authMode: options.authMode,
+    resumeFromRunId: canResume ? runId : undefined,
+  });
+
+  return { runId: newRunId, resumed: canResume, reason: canResume ? null : (check?.reason ?? null) };
+}
+
+/**
+ * "Casi, pero cambia X": sigue la conversación de una run con instrucciones
+ * nuevas. Aquí no vale empezar de cero — si la sesión no se puede retomar, el
+ * usuario tiene que enterarse y no pagar una run entera por sorpresa.
+ */
+export async function continueRun(
+  runId: string,
+  followUpPrompt: string,
+): Promise<string> {
+  const run = await db.taskRun.findUnique({ where: { id: runId } });
+  if (!run) throw new ResumeUnavailableError(`Run ${runId} no encontrada`);
+
+  const check = await resumeStatus(runId);
+  if (!check?.canResume) {
+    throw new ResumeUnavailableError(check?.reason ?? "No se puede retomar esta run.");
+  }
+
+  return enqueueTaskRun(run.taskId, run.agentId, {
+    resumeFromRunId: runId,
+    followUpPrompt,
+  });
+}
+
+/** Error de negocio: la ruta lo traduce a un 400 con el mensaje tal cual. */
+export class ResumeUnavailableError extends Error {}
 
 export function queueStats() {
   return {

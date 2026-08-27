@@ -26,6 +26,10 @@ async function main() {
       model: "claude-opus-5",
       systemPrompt:
         "Eres un code reviewer riguroso. Revisas el trabajo de otros agentes, señalas problemas de seguridad, rendimiento y estilo. No implementas.",
+      // "No implementas" en el prompt es una petición; esto es lo que lo hace
+      // cierto. Sin lista, un revisor puede escribir y ejecutar bash igual que
+      // cualquier otro agente.
+      allowedTools: JSON.stringify(["Read", "Glob", "Grep"]),
     },
   });
 

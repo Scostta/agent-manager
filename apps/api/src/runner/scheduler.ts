@@ -1,6 +1,6 @@
 import { db } from "../db.js";
 import { bus } from "../bus.js";
-import { enqueueTaskRun } from "./queue.js";
+import { relaunchRun } from "./queue.js";
 
 /**
  * Reintentos en espera de que se reponga la cuota del plan. El timer vive en
@@ -39,8 +39,10 @@ async function fireRetry(runId: string): Promise<void> {
   });
 
   try {
-    const newRunId = await enqueueTaskRun(run.taskId, run.agentId);
-    console.info(`[scheduler] cuota repuesta: run ${runId} reintentada como ${newRunId}`);
+    const { runId: newRunId, resumed } = await relaunchRun(runId);
+    console.info(
+      `[scheduler] cuota repuesta: run ${runId} ${resumed ? "retomada" : "reintentada"} como ${newRunId}`,
+    );
     bus.emit("board", { type: "task_updated", taskId: run.taskId });
   } catch (err) {
     console.warn(`[scheduler] no se pudo reintentar ${runId}:`, err);
