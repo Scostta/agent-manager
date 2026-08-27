@@ -4,6 +4,7 @@ import { scanSkills, watchSkills } from "./skills/scanner.js";
 import { reapOrphanRuns } from "./runner/reaper.js";
 import { clearAllRetries, restorePendingRetries } from "./runner/scheduler.js";
 import { startWorkspaceGc, stopWorkspaceGc } from "./runner/gc.js";
+import { backupOnStartup } from "./backup/snapshot.js";
 import { killActiveRuns } from "./runner/executor.js";
 
 const app = await buildApp();
@@ -30,6 +31,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     void app.close().then(() => process.exit(0));
   });
 }
+
+// Antes que nada: si algo de lo que viene a continuación deja la BD en mal
+// estado, la copia es de justo antes.
+await backupOnStartup();
 
 const reaped = await reapOrphanRuns();
 if (reaped > 0) {

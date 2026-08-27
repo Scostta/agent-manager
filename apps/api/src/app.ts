@@ -16,6 +16,7 @@ import { runRoutes } from "./routes/runs.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { fsRoutes } from "./routes/fs.js";
+import { backupRoutes } from "./routes/backup.js";
 
 import type { FastifyInstance } from "fastify";
 
@@ -58,6 +59,7 @@ export async function buildApp(
   await app.register(queueRoutes);
   await app.register(runRoutes);
   await app.register(statsRoutes);
+  await app.register(backupRoutes);
   await app.register(workspaceRoutes);
   await app.register(fsRoutes);
 

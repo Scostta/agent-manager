@@ -390,6 +390,7 @@
   <a href="#budget">Budget y costes</a>
 
   <div class="nav-section">API</div>
+  <a href="#backup">Copias de seguridad</a>
   <a href="#endpoints">Endpoints</a>
   <a href="#config">Configuración</a>
   <a href="#estructura">Estructura de ficheros</a>
@@ -1095,10 +1096,28 @@ un resumen breve del trabajo hecho.</code></pre>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/fs/roots</code></td><td>Raíces del disco, para el explorador del alta guiada</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/fs/browse?path=…</code></td><td>Lista una carpeta (el navegador no puede dar rutas absolutas)</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/fs/claude-md?path=…</code></td><td>Lee el CLAUDE.md que ya tenga la carpeta elegida</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/backup</code></td><td>Descarga una copia consistente de la BD</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/backup/history</code></td><td>Copias automáticas que hay ahora mismo</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/health</code></td><td>Healthcheck: <code>{ ok: true, time }</code></td></tr>
         </tbody>
       </table>
     </div>
+  </section>
+
+  <!-- ── BACKUP ─────────────────────────────────────────────────── -->
+  <section id="backup">
+    <h2>Copias de seguridad</h2>
+    <p>Todo el cockpit vive en un solo fichero SQLite: proyectos, agentes, tareas y el historial entero de tokens y coste. Si se corrompe, no hay de dónde sacarlo.</p>
+
+    <p>La API hace una copia <strong>al arrancar</strong> en <code>BACKUPS_ROOT</code> y conserva las <code>BACKUP_KEEP</code> últimas. Es lo primero que hace, antes que el reaper o el scanner: si algo de lo que viene después dejara la BD en mal estado, la copia es de justo antes. Y nunca tumba el arranque — quedarse sin copia es malo, no arrancar es peor.</p>
+
+    <p>Se usa <code>VACUUM INTO</code> y no un <code>copyFile</code>: produce un snapshot consistente aunque haya escrituras en marcha, y de paso compacta. Desde el dashboard hay un botón para bajarse una en cualquier momento (<code>GET /backup</code>), que se genera en un temporal y se borra al enviarla: descargar diez veces no debe barrer las automáticas.</p>
+
+    <div class="callout-warn callout">
+      <p><strong>Restaurar es manual, a propósito.</strong> Para la API, copia el fichero encima de <code>apps/api/prisma/dev.db</code> y vuelve a arrancar. No hay endpoint de restore: sobrescribir la base de datos viva desde una petición web es justo lo que no quieres tener a un clic de distancia.</p>
+    </div>
+
+    <p>Los workspaces y los logs NDJSON no entran en la copia: los primeros son desechables y los segundos crecen sin límite. Si quieres conservar los logs de una run concreta, están en <code>LOGS_ROOT</code>.</p>
   </section>
 
   <!-- ── CONFIG ─────────────────────────────────────────────────── -->
@@ -1126,6 +1145,8 @@ un resumen breve del trabajo hecho.</code></pre>
           <tr><td><code>PLAN_TIMEOUT_MS</code></td><td><code>300000</code> (5 min)</td><td>Más corto que <code>RUN_TIMEOUT_MS</code>: el usuario está esperando delante del formulario</td></tr>
           <tr><td><code>WORKSPACE_GC_DAYS</code></td><td><code>7</code></td><td>Edad mínima para que el GC toque un workspace</td></tr>
           <tr><td><code>WORKSPACE_GC_INTERVAL_HOURS</code></td><td><code>6</code></td><td>Cada cuánto barre. <code>0</code> lo desactiva</td></tr>
+          <tr><td><code>BACKUPS_ROOT</code></td><td><code>./backups</code></td><td>Dónde se guardan las copias de la BD</td></tr>
+          <tr><td><code>BACKUP_KEEP</code></td><td><code>5</code></td><td>Cuántas copias se conservan. <code>0</code> desactiva la copia automática; el botón de descarga sigue funcionando</td></tr>
           <tr><td><code>NEXT_PUBLIC_API_URL</code></td><td><code>http://localhost:3001</code></td><td>URL base de la API (en <code>apps/web/.env.local</code>)</td></tr>
         </tbody>
       </table>

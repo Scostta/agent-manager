@@ -67,6 +67,8 @@ apps/
         tools.ts                 # --allowedTools/--disallowedTools del agente
       skills/
         scanner.ts               # indexa SKILL.md con chokidar (hot-reload)
+      backup/
+        snapshot.ts              # copias de la BD con VACUUM INTO + poda
       tasks/
         dependencies.ts          # lógica pura: bloqueos y ciclos
         sync.ts                  # aplica esos bloqueos contra la BD
@@ -90,7 +92,7 @@ apps/
       test/
         harness.ts               # SQLite temporal para los tests con BD
       app.ts                     # buildApp(): plugins + rutas, sin arrancar nada
-      index.ts                   # entry point: arranque real (reaper, scanner, GC, listen)
+      index.ts                   # entry point: arranque real (backup, reaper, scanner, GC, listen)
 
   web/                          # Frontend Next.js
     src/
@@ -249,6 +251,7 @@ alguna de las ideas obvias ya está descartada ahí con su motivo.
 - **El SKILL.md tiene frontmatter roto** → `gray-matter` lanza. El scanner debe capturarlo y loggear, no crashear la app.
 - **stream-json no emite JSON en una línea** → ya hay un try/catch en `executor.ts` que lo trata como log plano. No rompas esa tolerancia.
 - **El usuario borra un SKILL.md que está asignado a un agente** → la fila en `AgentSkill` queda huérfana hasta que se limpie. Aceptable por ahora.
+- **La BD se corrompe** → todo el historial de costes vive en un SQLite. Se copia sola al arrancar la API (`BACKUPS_ROOT`, se conservan las `BACKUP_KEEP` últimas) y hay `GET /backup` para bajarse una. Restaurar es manual a propósito: parar la API, copiar el fichero encima de `dev.db`, arrancar. No hay endpoint de restore — sobrescribir la BD viva desde una petición web da demasiado miedo.
 - **Borrar un proyecto** → tasks y runs caen en cascada, pero el `ClaudeMd` no (la FK vive en Project), así que la ruta lo borra a mano. El fichero en disco se queda: es del repo. Sus workspaces también, y de esos se encarga el GC.
 - **Una migración que borra datos** → `prisma migrate dev` es interactivo y se niega a generarla desde una sesión de agente. Escribe el `migration.sql` a mano siguiendo el patrón `RedefineTables` de las migraciones ya existentes y aplícalo con `prisma migrate deploy`, que sí es no interactivo. Comprueba después que la columna se fue y que las filas siguen ahí.
 - **`prisma generate` falla con EPERM en Windows** → hay un proceso node vivo (un `pnpm dev`, un test colgado) con el motor de Prisma abierto. Mátalo y repite.

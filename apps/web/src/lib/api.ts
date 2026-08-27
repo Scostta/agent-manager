@@ -266,6 +266,19 @@ export const getRunResume = (runId: string) =>
 export const continueRun = (runId: string, prompt: string) =>
   api<{ runId: string }>(`/runs/${runId}/resume`, { method: "POST", ...json({ prompt }) });
 
+/* ── Backup ───────────────────────────────────────────────────────────────── */
+
+export type BackupHistory = {
+  root: string;
+  keep: number;
+  snapshots: { name: string; sizeBytes: number; at: string }[];
+};
+
+export const getBackupHistory = () => api<BackupHistory>("/backup/history");
+
+/** No pasa por `api()`: el navegador descarga el fichero, no lo parseamos. */
+export const backupDownloadUrl = (): string => sseUrl("/backup");
+
 /* ── Queue ────────────────────────────────────────────────────────────────── */
 
 export const getQueueStats = () => api<QueueStats>("/queue/stats");

@@ -72,7 +72,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-255 tests con `node:test`, sin dependencias nuevas: 225 en `apps/api` y 30 en
+270 tests con `node:test`, sin dependencias nuevas: 240 en `apps/api` y 30 en
 `apps/web`. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
@@ -261,9 +261,33 @@ del cockpit y la salida que no es JSON.
 De paso, `splitTools`/`sameTools` salieron del editor de agentes a
 `lib/format.ts`, junto a `describeToolPolicy` que ya vivía ahí.
 
+### Export/backup ✅
+
+Todo el cockpit vive en un SQLite y no había copia en ningún sitio. Ahora la API
+hace una al arrancar en `BACKUPS_ROOT` y conserva las `BACKUP_KEEP` últimas, y
+`GET /backup` baja una cuando quieras desde el dashboard.
+
+Tres decisiones que importan:
+
+- **`VACUUM INTO`, no `copyFile`.** Da un snapshot consistente aunque haya
+  escrituras en marcha, y de paso compacta.
+- **Automática, no solo un botón.** Un backup que hay que acordarse de pulsar es
+  un backup que no tienes. Va lo primero del arranque, antes que el reaper y el
+  scanner: si algo de lo que viene después dejara la BD en mal estado, la copia
+  es de justo antes. Y no puede tumbar el arranque — quedarse sin copia es malo,
+  no arrancar es peor.
+- **Restaurar es manual.** Parar la API, copiar el fichero encima de `dev.db`,
+  arrancar. Un endpoint que sobrescriba la BD viva desde una petición web es
+  justo lo que no quieres tener a un clic.
+
+`keep: 0` desactiva la copia automática pero **no borra** las que ya tuvieras:
+interpretarlo como "no conserves ninguna" sería lo contrario de lo que quiere
+quien la desactiva. Tiene su test, como que la poda no toque ficheros que no ha
+puesto ella.
+
 ### Pendientes
 
-- **Export/backup** y **editar SKILL.md desde la UI**, que ya venían de la Fase 5.
+- **Editar SKILL.md desde la UI**, que ya venía de la Fase 5.
 - **El aviso de run terminada no tiene replay**: una run que termine mientras el
   `EventSource` reconecta no avisa nunca.
 

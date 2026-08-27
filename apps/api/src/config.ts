@@ -68,4 +68,8 @@ export const config = {
   // Edad mínima para que el GC toque un workspace, y cada cuánto barre.
   workspaceGcDays: Math.max(0, Number(process.env.WORKSPACE_GC_DAYS ?? 7)),
   workspaceGcIntervalHours: Math.max(0, Number(process.env.WORKSPACE_GC_INTERVAL_HOURS ?? 6)),
+  // Copias de la BD. Se hace una al arrancar y se conservan las N últimas;
+  // 0 desactiva la copia automática (el endpoint de descarga sigue estando).
+  backupsRoot: expand(process.env.BACKUPS_ROOT ?? "./backups"),
+  backupKeep: Math.max(0, Number(process.env.BACKUP_KEEP ?? 5)),
 };
