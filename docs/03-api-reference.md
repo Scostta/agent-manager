@@ -39,6 +39,10 @@ Base URL: `http://localhost:3001`.
 ## Skills
 - `GET /skills`
 - `GET /skills/:id/content` — lee del disco
+- `PATCH /skills/:id/content` — `{ content }`. Escribe el SKILL.md en disco y lo
+  reindexa al momento, sin esperar a chokidar. Rechaza con 400 el frontmatter
+  roto, un `name` distinto del de la skill (crearía una entrada duplicada) y
+  cualquier ruta fuera de `SKILLS_PATHS`.
 - `POST /skills/rescan`
 
 ## Tasks

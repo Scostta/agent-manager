@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Icon } from "@/components/ui/icon";
 import { useToast } from "@/components/ui/toast.client";
-import { sseUrl } from "@/lib/api";
+import { listRuns, sseUrl } from "@/lib/api";
 
 import type { ReactElement } from "react";
-import type { BoardEvent } from "@/lib/types";
+import type { BoardEvent, RunListItem } from "@/lib/types";
 
 /**
  * Avisos del navegador cuando una run termina. Una run tarda minutos y hasta
@@ -50,11 +50,80 @@ const TITLE = {
  * Escucha el board y avisa. Vive en el shell, no en una ruta: el sentido de
  * esto es enterarte estés donde estés, incluso con el cockpit de fondo.
  */
+function notify(opts: {
+  runId: string;
+  status: "succeeded" | "failed";
+  taskTitle: string;
+  agentName: string;
+}): void {
+  const notification = new Notification(TITLE[opts.status], {
+    body: `${opts.taskTitle} · ${opts.agentName}`,
+    // Reemplaza el aviso anterior de la misma run en vez de apilarlo.
+    tag: opts.runId,
+  });
+
+  notification.onclick = () => {
+    window.focus();
+    window.location.href = `/runs/${opts.runId}`;
+    notification.close();
+  };
+}
+
 export function useRunNotifications(enabled: boolean): void {
+  /**
+   * Hasta cuándo sabemos que estamos al día. El SSE no reemite nada de lo que
+   * pasó mientras no estabas conectado, así que sin esto una run que termine
+   * durante una reconexión no avisa nunca.
+   */
+  const seenUntil = useRef<string>(new Date().toISOString());
+  /** Avisadas ya, para que el repesque no duplique lo que llegó por el stream. */
+  const announced = useRef(new Set<string>());
+
   useEffect(() => {
     if (!enabled || permission() !== "granted") return;
 
+    let closed = false;
+
+    const announce = (run: {
+      runId: string;
+      status: "succeeded" | "failed";
+      taskTitle: string;
+      agentName: string;
+      endedAt: string | null;
+    }): void => {
+      if (announced.current.has(run.runId)) return;
+      announced.current.add(run.runId);
+      if (run.endedAt && run.endedAt > seenUntil.current) seenUntil.current = run.endedAt;
+      notify(run);
+    };
+
+    /**
+     * Al conectar (y en cada reconexión) preguntamos qué terminó desde la
+     * última vez. El EventSource reconecta solo y en silencio; este es el único
+     * momento en que podemos enterarnos de lo que nos perdimos.
+     */
+    const catchUp = async (): Promise<void> => {
+      try {
+        const { runs } = await listRuns({ endedAfter: seenUntil.current, limit: 20 });
+        if (closed) return;
+        for (const run of runs as RunListItem[]) {
+          if (run.status !== "succeeded" && run.status !== "failed") continue;
+          announce({
+            runId: run.id,
+            status: run.status,
+            taskTitle: run.task.title,
+            agentName: run.agent.name,
+            endedAt: run.endedAt,
+          });
+        }
+      } catch {
+        // Sin red no hay repesca; el stream avisará de lo que venga después.
+      }
+    };
+
     const source = new EventSource(sseUrl("/board/stream"));
+
+    source.onopen = () => void catchUp();
 
     source.onmessage = (event) => {
       let parsed: BoardEvent;
@@ -65,29 +134,27 @@ export function useRunNotifications(enabled: boolean): void {
       }
       if (parsed?.type !== "run_finished") return;
 
-      // Cancelaste tú: ya sabes que ha terminado.
-      if (parsed.status === "cancelled") return;
-
       // Con la pestaña delante, la propia UI ya se actualiza sola. Avisar
-      // encima sería ruido sobre algo que estás mirando.
+      // encima sería ruido sobre algo que estás mirando — pero se marca como
+      // vista igualmente para que la repesca no la saque luego.
+      announced.current.add(parsed.runId);
+      if (parsed.status === "cancelled") return;
       if (document.visibilityState !== "hidden") return;
 
-      const notification = new Notification(TITLE[parsed.status], {
-        body: `${parsed.taskTitle} · ${parsed.agentName}`,
-        // Reemplaza el aviso anterior de la misma run en vez de apilarlo.
-        tag: parsed.runId,
+      notify({
+        runId: parsed.runId,
+        status: parsed.status,
+        taskTitle: parsed.taskTitle,
+        agentName: parsed.agentName,
       });
-
-      notification.onclick = () => {
-        window.focus();
-        window.location.href = `/runs/${parsed.runId}`;
-        notification.close();
-      };
     };
 
     source.onerror = () => {};
 
-    return () => source.close();
+    return () => {
+      closed = true;
+      source.close();
+    };
   }, [enabled]);
 }
 

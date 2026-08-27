@@ -44,7 +44,9 @@ function scopeFromPath(filePath: string): string {
   return "user";
 }
 
-async function upsertSkillFromFile(filePath: string): Promise<void> {
+/** Reindexa un SKILL.md concreto. Exportado para poder hacerlo justo después
+ *  de guardar desde la UI, sin esperar a que chokidar se entere. */
+export async function upsertSkillFromFile(filePath: string): Promise<void> {
   const raw = await fs.readFile(filePath, "utf8");
   const { data } = matter(raw);
   const name = data.name ?? path.basename(path.dirname(filePath));

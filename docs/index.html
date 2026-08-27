@@ -605,6 +605,10 @@ checklists, etc.</code></pre>
       </table>
     </div>
 
+    <p>Desde la sección Skills se puede <strong>editar el SKILL.md</strong> con el mismo editor Monaco que CLAUDE.md. Al guardar se escribe en disco y se reindexa al momento — el watcher lo vería igual, pero esperar a chokidar dejaría la ficha con el hash y los tags viejos durante ese instante.</p>
+
+    <p>Antes de escribir hay dos guardas: que el frontmatter sea YAML válido (si no, la skill se quedaría con los metadatos viejos y sin avisarte) y que el <code>name</code> no cambie, porque es la clave del upsert del scanner y renombrarlo desde el editor crearía una segunda entrada apuntando al mismo fichero. Crear y borrar SKILL.md sigue siendo cosa de tu editor.</p>
+
     <div class="callout-warn callout">
       <p><strong>Nota:</strong> El contenido del SKILL.md nunca se guarda en la BD. Si borras el fichero en disco y había agentes que lo tenían asignado, la relación <code>AgentSkill</code> queda huérfana hasta que se limpie manualmente o se ejecute un cleanup al arranque.</p>
     </div>
@@ -1033,6 +1037,7 @@ un resumen breve del trabajo hecho.</code></pre>
         <tbody>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/skills</code></td><td>Lista skills indexadas (tags como array)</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/skills/:id/content</code></td><td>Contenido del SKILL.md leído de disco</td></tr>
+          <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/skills/:id/content</code></td><td>Guarda el SKILL.md en disco y lo reindexa. Rechaza el frontmatter roto antes de escribir</td></tr>
           <tr><td><span class="badge badge-green">POST</span></td><td><code>/skills/rescan</code></td><td>Re-indexa todos los SKILL.md manualmente</td></tr>
         </tbody>
       </table>
@@ -1058,7 +1063,7 @@ un resumen breve del trabajo hecho.</code></pre>
       <table>
         <thead><tr><th>Método</th><th>Ruta</th><th>Descripción</th></tr></thead>
         <tbody>
-          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs</code></td><td>Historial con filtros (<code>projectId</code>, <code>taskId</code>, <code>agentId</code>, <code>status</code>) y paginación</td></tr>
+          <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs</code></td><td>Historial con filtros (<code>projectId</code>, <code>taskId</code>, <code>agentId</code>, <code>status</code>, <code>endedAfter</code>) y paginación</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs/:id</code></td><td>Run con task y agente</td></tr>
           <tr><td><span class="badge badge-green">POST</span></td><td><code>/runs/:id/cancel</code></td><td>Cancela la run matando su árbol de procesos</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/runs/:id/stream</code></td><td>SSE stream de eventos en tiempo real</td></tr>

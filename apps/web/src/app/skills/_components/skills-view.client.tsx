@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import useSWR, { useSWRConfig } from "swr";
 
 import { Icon } from "@/components/ui/icon";
@@ -14,12 +15,35 @@ import {
   cn,
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
-import { getSkillContent, rescanSkills } from "@/lib/api";
+import { getSkillContent, rescanSkills, updateSkillContent } from "@/lib/api";
 import { formatRelative, shortenPath } from "@/lib/format";
 import { keys, useSkills } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
 import type { Skill } from "@/lib/types";
+
+// Monaco toca `window` al cargar, así que no puede prerenderizarse en el server.
+const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center bg-bg-base">
+      <Spinner size={16} />
+    </div>
+  ),
+});
+
+const EDITOR_OPTIONS = {
+  fontSize: 12,
+  lineHeight: 20,
+  fontFamily: "var(--font-mono, ui-monospace, monospace)",
+  minimap: { enabled: false },
+  wordWrap: "on",
+  scrollBeyondLastLine: false,
+  renderLineHighlight: "none",
+  padding: { top: 16, bottom: 16 },
+  smoothScrolling: true,
+  tabSize: 2,
+} as const;
 
 function SkillRow({
   skill,
@@ -75,6 +99,36 @@ function SkillDetail({ skill }: { skill: Skill }): ReactElement {
     isLoading,
   } = useSWR(`/skills/${skill.id}/content`, () => getSkillContent(skill.id));
 
+  const { mutate } = useSWRConfig();
+  const toast = useToast();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // El borrador se siembra cuando llega el fichero, y se tira al cambiar de
+  // skill: si no, editarías una y verías el texto de la anterior.
+  useEffect(() => setDraft(null), [skill.id]);
+  useEffect(() => {
+    if (file && draft === null) setDraft(file.content);
+  }, [file, draft]);
+
+  const dirty = draft !== null && !!file && draft !== file.content;
+
+  const save = async (): Promise<void> => {
+    if (draft === null) return;
+    setSaving(true);
+    try {
+      await updateSkillContent(skill.id, draft);
+      // El fichero cambió en disco y sus metadatos en la BD: las dos cosas.
+      await mutate(`/skills/${skill.id}/content`);
+      await mutate(keys.skills);
+      toast("SKILL.md guardado", "success");
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "No se pudo guardar", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-w-0 flex-col">
       <div className="shrink-0 border-b border-border-1 px-5 py-4">
@@ -85,9 +139,27 @@ function SkillDetail({ skill }: { skill: Skill }): ReactElement {
               {skill.description || "Sin descripción en el frontmatter"}
             </p>
           </div>
-          <Badge variant="accent" size="sm">
-            {skill.scope}
-          </Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            {dirty && (
+              <Button
+                variant="primary"
+                size="xs"
+                icon="check"
+                loading={saving}
+                onClick={() => void save()}
+              >
+                Guardar
+              </Button>
+            )}
+            {dirty && !saving && (
+              <Button variant="ghost" size="xs" onClick={() => setDraft(file?.content ?? "")}>
+                Descartar
+              </Button>
+            )}
+            <Badge variant="accent" size="sm">
+              {skill.scope}
+            </Badge>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-txt-3">
@@ -114,11 +186,15 @@ function SkillDetail({ skill }: { skill: Skill }): ReactElement {
         )}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto bg-bg-base p-5">
-        {isLoading && <Spinner size={16} />}
+      <div className="min-h-0 flex-1 overflow-hidden bg-bg-base">
+        {isLoading && (
+          <div className="p-5">
+            <Spinner size={16} />
+          </div>
+        )}
 
         {error && (
-          <div className="flex items-start gap-2 rounded-md border border-danger/20 bg-danger-dim px-3 py-2.5 text-sm text-danger">
+          <div className="m-5 flex items-start gap-2 rounded-md border border-danger/20 bg-danger-dim px-3 py-2.5 text-sm text-danger">
             <Icon name="alertCircle" size={13} className="mt-px shrink-0" />
             <span>
               No se pudo leer el fichero en disco. Puede que se haya movido o borrado; un
@@ -127,10 +203,16 @@ function SkillDetail({ skill }: { skill: Skill }): ReactElement {
           </div>
         )}
 
-        {file && (
-          <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-txt-2">
-            {file.content}
-          </pre>
+        {file && draft !== null && (
+          <MonacoEditor
+            key={skill.id}
+            height="100%"
+            defaultLanguage="markdown"
+            theme="vs-dark"
+            value={draft}
+            onChange={(value) => setDraft(value ?? "")}
+            options={EDITOR_OPTIONS}
+          />
         )}
       </div>
     </div>
