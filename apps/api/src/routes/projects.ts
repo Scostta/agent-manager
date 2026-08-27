@@ -104,9 +104,24 @@ export async function projectRoutes(app: FastifyInstance) {
     return db.project.update({ where: { id }, data: body });
   });
 
-  app.delete("/projects/:id", async (req) => {
+  /**
+   * Las tasks y sus runs se van en cascada, pero el `ClaudeMd` del proyecto no:
+   * la FK vive en Project, así que la fila sobreviviría al proyecto y se
+   * quedaría en el editor como un documento "sin asignar" que ya no es de nadie.
+   * El fichero en disco, si lo tenía, se queda: ese es del repo.
+   */
+  app.delete("/projects/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
+    const project = await db.project.findUnique({
+      where: { id },
+      select: { claudeMdId: true },
+    });
+    if (!project) return reply.notFound();
+
     await db.project.delete({ where: { id } });
+    if (project.claudeMdId) {
+      await db.claudeMd.delete({ where: { id: project.claudeMdId } }).catch(() => {});
+    }
     return { ok: true };
   });
 }

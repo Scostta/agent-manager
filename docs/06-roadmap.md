@@ -72,7 +72,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-221 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+225 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
@@ -221,14 +221,30 @@ El scope `agent` se quita, y este sí por redundante: el `systemPrompt` del
 agente ya es el sitio de las instrucciones propias de un agente, y nunca tuvo
 FK que lo enlazara.
 
+### `Agent.status` ✅ — se quita
+
+`idle | running | paused | disabled`: nadie lo escribía —el Zod del PATCH ni lo
+aceptaba— y nadie lo leía. Una máquina de estados en el modelo de dominio que no
+existía.
+
+Se quita en vez de conectarse porque los dos valores que suenan útiles son
+estado del **sistema**, no tuyo, y guardarlos es pedir que se desincronicen: un
+cierre a lo bruto dejaría un agente en `running` para siempre, exactamente el
+problema que el reaper tiene que limpiar con las runs. Si algún día hace falta
+"qué agente está ocupado", se deriva de sus runs en `queued`/`running`, que es
+la verdad en vivo.
+
+### Borrar un proyecto dejaba su `ClaudeMd` huérfano ✅
+
+Las tasks y las runs caen en cascada; el `ClaudeMd` no, porque la FK vive en
+`Project`. La fila sobrevivía al proyecto y se quedaba en el editor como un
+documento "sin asignar" que ya no era de nadie. Ahora la ruta lo borra.
+
+El fichero en disco se conserva: ese es del repo, no del cockpit. Hay test de
+las dos cosas — que la fila se va y que el fichero se queda.
+
 ### Pendientes de la misma revisión
 
-- **`Agent.status`** (`idle | running | paused | disabled`): nadie lo escribe —el
-  Zod del PATCH ni lo acepta— y nadie lo lee. Una máquina de estados en el
-  modelo de dominio que no existe. Conectarlo o quitarlo.
-- **Borrar un proyecto deja su `ClaudeMd` huérfano.** Misma familia que las filas
-  de `AgentSkill` cuando desaparece un SKILL.md. Se ven en el editor como "Sin
-  asignar (project)".
 - **Tests en `apps/web`.** El primero que hace falta es `formatLogLine` del visor
   de runs: traduce cada evento del stream-json a una línea legible, y es justo
   lo que se rompe en silencio cuando el CLI cambia la forma de un evento.

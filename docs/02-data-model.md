@@ -31,6 +31,11 @@ Ver `apps/api/prisma/schema.prisma`.
   crear (o pasar a) un segundo global — con dos y sin orden visible, cuál gana
   sería un misterio.
 
+Borrar un proyecto arrastra sus tasks y sus runs en cascada, pero **no** su
+`ClaudeMd`: la FK está en `Project`, así que la fila sobreviviría al proyecto.
+La ruta lo borra a mano. El fichero en disco, si el documento tenía `filePath`,
+se conserva — ese pertenece al repo, no al cockpit.
+
 ## SQLite notas
 
 - Arrays serializados como JSON string (`tags`, `dependsOn`, `allowedTools`).
