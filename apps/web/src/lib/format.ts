@@ -77,3 +77,17 @@ export function formatBytes(bytes: number): string {
   }
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
+
+/**
+ * Con qué restricción de herramientas corre un agente. Sin listas puede
+ * ejecutar bash arbitrario en su workspace, así que conviene que se lea.
+ */
+export function describeToolPolicy(policy: {
+  allowedTools: string[];
+  disallowedTools: string[];
+}): string {
+  const parts: string[] = [];
+  if (policy.allowedTools.length) parts.push(`solo ${policy.allowedTools.join(", ")}`);
+  if (policy.disallowedTools.length) parts.push(`sin ${policy.disallowedTools.join(", ")}`);
+  return parts.length ? parts.join(" · ") : "sin restricción";
+}

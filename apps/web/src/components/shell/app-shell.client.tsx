@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 
 import { CommandPalette } from "@/components/shell/command-palette.client";
 import { Header } from "@/components/shell/header.client";
+import {
+  useRunNotificationSetting,
+  useRunNotifications,
+} from "@/components/shell/run-notifications.client";
 import { Sidebar } from "@/components/shell/sidebar.client";
 
 import type { ReactElement, ReactNode } from "react";
@@ -11,6 +15,9 @@ import type { Crumb } from "@/components/shell/header.client";
 
 export function AppShell({ crumbs, children }: { crumbs: Crumb[]; children: ReactNode }): ReactElement {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // Aquí y no en una ruta: el aviso solo sirve si llega estés donde estés.
+  const [notify, setNotify] = useRunNotificationSetting();
+  useRunNotifications(notify);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,7 +34,12 @@ export function AppShell({ crumbs, children }: { crumbs: Crumb[]; children: Reac
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header crumbs={crumbs} onOpenPalette={() => setPaletteOpen(true)} />
+        <Header
+          crumbs={crumbs}
+          onOpenPalette={() => setPaletteOpen(true)}
+          notify={notify}
+          onNotifyChange={setNotify}
+        />
         <main className="relative flex-1 overflow-hidden">{children}</main>
       </div>
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />

@@ -60,7 +60,16 @@ function RunRow({ run }: { run: RunListItem }): ReactElement {
       </span>
 
       <span className="flex min-w-0 flex-col leading-tight">
-        <span className="truncate-1 text-txt-1">{run.task.title}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          {/* Una continuación cuesta una fracción de la primera vuelta: sin
+              marcarla, su coste bajo se lee como una run cualquiera. */}
+          {run.resumedFromId && (
+            <span className="flex shrink-0 text-txt-3" title="Continúa la sesión de otra run">
+              <Icon name="refresh" size={10} />
+            </span>
+          )}
+          <span className="truncate-1 text-txt-1">{run.task.title}</span>
+        </span>
         {run.branchName && (
           <span className="flex items-center gap-1 font-mono text-2xs text-txt-3">
             <Icon name="gitBranch" size={9} />

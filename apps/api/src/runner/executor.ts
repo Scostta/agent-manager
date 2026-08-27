@@ -14,6 +14,8 @@ import {
   cleanupWorkspace,
 } from "./workspace.js";
 import { killProcessTree, spawnOptions } from "../lib/process.js";
+import { RESUME_AFTER_LIMIT_PROMPT } from "./resume.js";
+import { toolArgs } from "./tools.js";
 import { describeRateLimit, detectRateLimit, type RateLimitHit } from "./rateLimit.js";
 
 const activeProcesses = new Map<string, ChildProcessWithoutNullStreams>();
@@ -127,12 +129,28 @@ export async function executeTaskRun(
   const { task, agent } = run;
   const project = task.project;
 
-  const { workspacePath, branchName } = await setupWorkspace(
-    project,
-    run,
-    config.workspacesRoot,
-  );
+  // Una continuación retoma la sesión del padre, y el CLI indexa las sesiones
+  // por el directorio donde corrieron: tiene que volver al mismo workspace.
+  const parent = run.resumedFromId
+    ? await db.taskRun.findUnique({ where: { id: run.resumedFromId } })
+    : null;
 
+  if (parent && !parent.sessionId) {
+    throw new Error(
+      `La run ${parent.id} no guardó sesión del CLI, así que no se puede retomar.`,
+    );
+  }
+
+  // Quien creó el workspace es quien puede destruirlo. Una continuación vive en
+  // el del padre: limpiarlo al fallar se llevaría por delante su trabajo.
+  const ownsWorkspace = !parent;
+
+  const { workspacePath, branchName } = parent
+    ? { workspacePath: parent.workspacePath, branchName: parent.branchName }
+    : await setupWorkspace(project, run, config.workspacesRoot);
+
+  // Idempotente: en una continuación las skills ya están enlazadas y el
+  // CLAUDE.md inyectado, pero repetirlo cuesta nada y cubre que hayan cambiado.
   await injectWorkspaceResources({
     workspacePath,
     agentSkills: agent.skills,
@@ -140,16 +158,36 @@ export async function executeTaskRun(
   });
 
   const skillNames = agent.skills.map((s) => s.skill.name);
-  const prompt = buildPrompt({
-    systemPrompt: agent.systemPrompt,
-    taskTitle: task.title,
-    taskDescription: task.description,
-    skillNames,
-  });
+  // Al retomar, el contexto de la tarea ya está en la sesión: repetir el
+  // systemPrompt entero solo serviría para pagarlo otra vez.
+  const prompt = parent
+    ? (run.followUpPrompt ?? RESUME_AFTER_LIMIT_PROMPT)
+    : buildPrompt({
+        systemPrompt: agent.systemPrompt,
+        taskTitle: task.title,
+        taskDescription: task.description,
+        skillNames,
+      });
 
   await fs.mkdir(config.logsRoot, { recursive: true });
   const logPath = path.join(config.logsRoot, `${runId}.ndjson`);
   const logStream = createWriteStream(logPath, { flags: "a" });
+
+  // El NDJSON solo guardaba lo que devuelve el CLI, así que cuando una run
+  // salía rara no había forma de ver qué se le había pedido. Va como primera
+  // línea, con el mismo formato que el resto para que el visor la lea igual.
+  function logRequest(args: string[]): void {
+    const event = {
+      type: "cockpit",
+      subtype: "request",
+      model: agent.model,
+      // Solo los flags: el prompt va aparte y duplicarlo hace el log ilegible.
+      flags: args.slice(2),
+      resumedFrom: parent?.id ?? null,
+      prompt,
+    };
+    logStream.write(JSON.stringify(event) + "\n");
+  }
 
   await db.taskRun.update({
     where: { id: runId },
@@ -165,6 +203,13 @@ export async function executeTaskRun(
     "--model", agent.model,
     "--permission-mode", "acceptEdits",
   ];
+
+  // Sin listas no añade nada: el agente sale con acceso a todo, como antes.
+  args.push(...toolArgs(agent));
+
+  if (parent?.sessionId) args.push("--resume", parent.sessionId);
+
+  logRequest(args);
 
   const child = runtime.spawn(config.claudeCli, args, {
     cwd: workspacePath,
@@ -209,6 +254,9 @@ export async function executeTaskRun(
   // mensaje, todos con el mismo usage. Deduplicamos por message.id para no
   // contar el mismo consumo varias veces.
   const usageByMessage = new Map<string, TokenCounts>();
+  // El session_id que anuncia el CLI. Guardarlo es lo que permite retomar esta
+  // run más adelante con `--resume` en vez de empezar de cero.
+  let sessionId: string | null = null;
   let resultTotals: TokenCounts | null = null;
   let resultCostUsd: number | null = null;
   let resultSummary: string | null = null;
@@ -253,6 +301,7 @@ export async function executeTaskRun(
             cacheReadTokens: totals.cacheRead,
             cacheWriteTokens: totals.cacheWrite,
             costUsd: currentCost(totals),
+            ...(sessionId ? { sessionId } : {}),
           },
         }),
       )
@@ -281,6 +330,16 @@ export async function executeTaskRun(
     }
 
     bus.emit(`run:${runId}`, { type: "stream", data: event });
+
+    // Lo trae el evento `init`, pero todos los demás lo repiten: cogemos el
+    // primero que llegue. Al retomar, el CLI puede devolver un id distinto del
+    // que le pasamos — el que vale para la siguiente vuelta es este.
+    if (!sessionId && typeof event.session_id === "string") {
+      sessionId = event.session_id;
+      // Se escribe en el flush periódico, junto a los tokens: dos updates
+      // sueltos sobre la misma fila es justo lo que satura SQLite.
+      dirty = true;
+    }
 
     if (event.type === "result") {
       resultTotals = totalsFromResult(event);
@@ -326,6 +385,21 @@ export async function executeTaskRun(
     logStream.write(`[stderr] ${text}\n`);
     bus.emit(`run:${runId}`, { type: "log", line: text });
   });
+
+  /**
+   * Una run tarda minutos y el cockpit no avisaba: sin la pestaña delante no te
+   * enterabas. Orquestar agentes y tener que vigilarlos se contradice.
+   */
+  function announceFinished(status: "succeeded" | "failed" | "cancelled"): void {
+    bus.emit("board", {
+      type: "run_finished",
+      runId,
+      taskId: task.id,
+      taskTitle: task.title,
+      agentName: agent.name,
+      status,
+    });
+  }
 
   return new Promise<void>((resolve) => {
     let exitInfo: { code: number | null; signal: NodeJS.Signals | null } | null = null;
@@ -383,12 +457,17 @@ export async function executeTaskRun(
 
       await settleTaskStatus(task.id, finalStatus);
 
-      await cleanupWorkspace(project, updated).catch((err) => {
-        console.warn(`[runner] cleanup falló para run ${runId}:`, err);
-      });
+      // Quedarse sin cuota no es motivo para tirar el trabajo: el workspace es
+      // lo que el reintento necesita para retomar la sesión ahí mismo.
+      if (ownsWorkspace && !hitLimit) {
+        await cleanupWorkspace(project, updated).catch((err) => {
+          console.warn(`[runner] cleanup falló para run ${runId}:`, err);
+        });
+      }
 
       bus.emit(`run:${runId}`, { type: "status", status: finalStatus });
       bus.emit("board", { type: "task_updated", taskId: task.id });
+      announceFinished(finalStatus);
       resolve();
     }
 
@@ -436,6 +515,7 @@ export async function executeTaskRun(
 
       bus.emit(`run:${runId}`, { type: "status", status: "failed" });
       bus.emit("board", { type: "task_updated", taskId: task.id });
+      announceFinished("failed");
       resolve();
     }
 

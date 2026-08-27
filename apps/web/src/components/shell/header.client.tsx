@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Icon } from "@/components/ui/icon";
 import { Kbd } from "@/components/ui/primitives.client";
 import { QueueControl } from "@/components/shell/queue-control.client";
+import { RunNotificationsToggle } from "@/components/shell/run-notifications.client";
 
 import type { ReactElement } from "react";
 
@@ -13,9 +14,13 @@ export type Crumb = { label: string; href?: string };
 export function Header({
   crumbs,
   onOpenPalette,
+  notify,
+  onNotifyChange,
 }: {
   crumbs: Crumb[];
   onOpenPalette: () => void;
+  notify: boolean;
+  onNotifyChange: (enabled: boolean) => void;
 }): ReactElement {
   return (
     <header className="flex h-header shrink-0 items-center justify-between border-b border-border-1 bg-bg-2 px-4">
@@ -50,6 +55,7 @@ export function Header({
 
       <div className="flex shrink-0 items-center gap-2">
         <QueueControl />
+        <RunNotificationsToggle enabled={notify} onChange={onNotifyChange} />
         <button
           type="button"
           onClick={onOpenPalette}

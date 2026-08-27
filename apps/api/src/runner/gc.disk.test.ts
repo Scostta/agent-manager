@@ -225,6 +225,62 @@ describe("collectWorkspaces: copias", () => {
   });
 });
 
+describe("collectWorkspaces: continuaciones", () => {
+  /**
+   * Una continuación corre en el workspace del padre, así que la carpeta lleva
+   * el id del padre. Fechar la carpeta por él la haría parecer abandonada
+   * mientras el agente sigue trabajando dentro.
+   */
+  test("una continuación reciente rejuvenece el workspace del padre", async () => {
+    const project = await seedProject("copy");
+    const parent = await seedRun(project, { endedDaysAgo: 365 });
+
+    await db.taskRun.create({
+      data: {
+        taskId: parent.taskId,
+        agentId: parent.agentId,
+        status: "succeeded",
+        workspacePath: parent.workspacePath,
+        logPath: "",
+        resumedFromId: parent.id,
+        endedAt: new Date(),
+      },
+    });
+
+    const [entry] = await scanWorkspaces(30);
+
+    assert.ok(entry.facts.ageDays < 1, "la carpeta se usó hoy, no hace un año");
+    assert.equal(entry.verdict.action, "keep");
+    assert.equal((await collectWorkspaces({ olderThanDays: 30 })).removed, 0);
+    assert.ok(await exists(parent.workspacePath));
+  });
+
+  test("una continuación en marcha protege el workspace aunque el padre sea viejo", async () => {
+    const project = await seedProject("copy");
+    const parent = await seedRun(project, { runStatus: "failed", endedDaysAgo: 365 });
+
+    await db.taskRun.create({
+      data: {
+        taskId: parent.taskId,
+        agentId: parent.agentId,
+        status: "running",
+        workspacePath: parent.workspacePath,
+        logPath: "",
+        resumedFromId: parent.id,
+        startedAt: daysAgo(400),
+      },
+    });
+
+    // Con startedAt viejo la edad no la salva: lo que la salva es estar viva.
+    const [entry] = await scanWorkspaces(0);
+
+    assert.equal(entry.verdict.action, "keep");
+    assert.match(entry.verdict.reason, /en marcha/);
+    assert.equal((await collectWorkspaces({ olderThanDays: 0 })).removed, 0);
+    assert.ok(await exists(parent.workspacePath));
+  });
+});
+
 describe("collectWorkspaces: dryRun y huérfanas", () => {
   test("dryRun informa de lo que se llevaría sin tocar el disco", async () => {
     const project = await seedProject("copy");

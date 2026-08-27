@@ -121,6 +121,21 @@ const PATHS: Record<string, ReactElement> = {
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
     </>
   ),
+  bell: (
+    <>
+      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+    </>
+  ),
+  bellOff: (
+    <>
+      <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+      <path d="M18.6 13c.4 1.9 1.4 3 1.4 3H6" />
+      <path d="M18 8a6 6 0 0 0-9.3-5" />
+      <path d="M6.3 6.3A6 6 0 0 0 6 8c0 7-3 9-3 9" />
+      <line x1="2" y1="2" x2="22" y2="22" />
+    </>
+  ),
   archive: (
     <>
       <rect x="2" y="4" width="20" height="5" rx="1" />

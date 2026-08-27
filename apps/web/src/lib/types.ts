@@ -72,6 +72,9 @@ export type Agent = {
   model: string;
   systemPrompt: string;
   maxBudgetUsd: number | null;
+  /** Herramientas del CLI que puede usar. Vacías = sin restricción. */
+  allowedTools: string[];
+  disallowedTools: string[];
   status: string;
   skills?: { skillId: string; skill: Skill }[];
   _count?: { runs: number };
@@ -98,8 +101,21 @@ export type TaskRun = {
    *  reintentará sola al reset; "error" = fallo normal. */
   failureKind: string | null;
   rateLimitResetAt: string | null;
+  /** session_id del CLI. Sin él no se puede retomar la conversación. */
+  sessionId: string | null;
+  /** Run cuya sesión continúa esta. Comparte su workspace y su rama. */
+  resumedFromId: string | null;
+  /** Instrucciones con las que se retomó. null en una run de primera vuelta. */
+  followUpPrompt: string | null;
   startedAt: string;
   endedAt: string | null;
+};
+
+/** GET /runs/:id/resume. Si se puede seguir la conversación de esta run. */
+export type ResumeStatus = {
+  canResume: boolean;
+  reason: string | null;
+  sessionId: string | null;
 };
 
 export function isRateLimited(run: { failureKind?: string | null } | null | undefined): boolean {
@@ -148,7 +164,6 @@ export type Task = {
   priority: number;
   assignedAgentId: string | null;
   assignedAgent: Agent | null;
-  requiredSkillIds: string[];
   dependsOn: string[];
   position: number;
   /** GET /projects/:id/tasks devuelve solo la run más reciente. */
@@ -179,7 +194,16 @@ export type BoardEvent =
   | { type: "task_updated"; taskId: string }
   | { type: "task_deleted"; taskId: string }
   /** Pausa, concurrencia o kill switch. */
-  | { type: "queue_changed" };
+  | { type: "queue_changed" }
+  /** Una run que acaba de terminar. Trae lo justo para pintar el aviso. */
+  | {
+      type: "run_finished";
+      runId: string;
+      taskId: string;
+      taskTitle: string;
+      agentName: string;
+      status: "succeeded" | "failed" | "cancelled";
+    };
 
 export const PRIORITY_LOW = 0;
 export const PRIORITY_MEDIUM = 1;

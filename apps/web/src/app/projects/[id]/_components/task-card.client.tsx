@@ -5,21 +5,19 @@ import { useSortable } from "@dnd-kit/sortable";
 
 import { PRIORITY_DOT } from "./columns";
 import { Icon } from "@/components/ui/icon";
-import { AgentAvatar, Chip, StatusDot, cn } from "@/components/ui/primitives.client";
+import { AgentAvatar, StatusDot, cn } from "@/components/ui/primitives.client";
 import { formatCost, formatDuration, formatRelative, formatTokens } from "@/lib/format";
 import { isActiveRun, latestRun } from "@/lib/types";
 
 import type { ReactElement } from "react";
-import type { Skill, Task } from "@/lib/types";
+import type { Task } from "@/lib/types";
 
 export function TaskCardBody({
   task,
-  skills,
   compact,
   dragging,
 }: {
   task: Task;
-  skills: Skill[];
   compact?: boolean;
   dragging?: boolean;
 }): ReactElement {
@@ -35,9 +33,6 @@ export function TaskCardBody({
     const iv = setInterval(tick, 1000);
     return () => clearInterval(iv);
   }, [active, run]);
-
-  const taskSkills = skills.filter((s) => task.requiredSkillIds.includes(s.id));
-  const shown = compact ? [] : taskSkills.slice(0, 2);
 
   return (
     <div
@@ -89,12 +84,6 @@ export function TaskCardBody({
             <span className="text-xs text-txt-3">{task.assignedAgent.name}</span>
           </span>
         )}
-        {shown.map((skill) => (
-          <Chip key={skill.id}>{skill.name}</Chip>
-        ))}
-        {!compact && taskSkills.length > shown.length && (
-          <span className="text-2xs text-txt-3">+{taskSkills.length - shown.length}</span>
-        )}
         {run && !active && (
           <span
             className={cn(
@@ -129,12 +118,10 @@ export function TaskCardBody({
 
 export function SortableTaskCard({
   task,
-  skills,
   compact,
   onSelect,
 }: {
   task: Task;
-  skills: Skill[];
   compact?: boolean;
   onSelect: (task: Task) => void;
 }): ReactElement {
@@ -155,7 +142,7 @@ export function SortableTaskCard({
       onClick={() => onSelect(task)}
       className={cn("cursor-grab active:cursor-grabbing", isDragging && "opacity-40")}
     >
-      <TaskCardBody task={task} skills={skills} compact={compact} dragging={isDragging} />
+      <TaskCardBody task={task} compact={compact} dragging={isDragging} />
     </div>
   );
 }

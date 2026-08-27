@@ -1,6 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "../db.js";
+import { parseToolList } from "../runner/tools.js";
+
+import type { Agent } from "@prisma/client";
+
+/**
+ * Lista de herramientas del CLI. Vacía es lo mismo que no poner nada: pasar
+ * `--allowedTools` sin nada no es "todas", es "ninguna", y eso deja al agente
+ * sin poder hacer su trabajo. Se guarda como JSON string, igual que el resto de
+ * arrays en SQLite.
+ */
+const ToolList = z
+  .array(z.string().trim().min(1))
+  .nullable()
+  .transform((tools) => (tools?.length ? JSON.stringify([...new Set(tools)]) : null));
 
 const AgentInput = z.object({
   name: z.string().min(1),
@@ -9,14 +23,26 @@ const AgentInput = z.object({
   systemPrompt: z.string().min(1),
   maxBudgetUsd: z.number().positive().optional(),
   skillIds: z.array(z.string()).optional(),
+  allowedTools: ToolList.optional(),
+  disallowedTools: ToolList.optional(),
 });
+
+/** El cliente espera arrays; en BD son JSON string. Igual que /skills con tags. */
+function withToolLists<T extends Agent>(agent: T) {
+  return {
+    ...agent,
+    allowedTools: parseToolList(agent.allowedTools),
+    disallowedTools: parseToolList(agent.disallowedTools),
+  };
+}
 
 export async function agentRoutes(app: FastifyInstance) {
   app.get("/agents", async () => {
-    return db.agent.findMany({
+    const agents = await db.agent.findMany({
       include: { skills: { include: { skill: true } }, _count: { select: { runs: true } } },
       orderBy: { updatedAt: "desc" },
     });
+    return agents.map(withToolLists);
   });
 
   app.get("/agents/:id", async (req, reply) => {
@@ -26,12 +52,12 @@ export async function agentRoutes(app: FastifyInstance) {
       include: { skills: { include: { skill: true } } },
     });
     if (!agent) return reply.notFound();
-    return agent;
+    return withToolLists(agent);
   });
 
   app.post("/agents", async (req) => {
     const { skillIds, ...data } = AgentInput.parse(req.body);
-    return db.agent.create({
+    const agent = await db.agent.create({
       data: {
         ...data,
         skills: skillIds
@@ -40,6 +66,7 @@ export async function agentRoutes(app: FastifyInstance) {
       },
       include: { skills: { include: { skill: true } } },
     });
+    return withToolLists(agent);
   });
 
   app.patch("/agents/:id", async (req) => {
@@ -53,11 +80,12 @@ export async function agentRoutes(app: FastifyInstance) {
       });
     }
 
-    return db.agent.update({
+    const agent = await db.agent.update({
       where: { id },
       data,
       include: { skills: { include: { skill: true } } },
     });
+    return withToolLists(agent);
   });
 
   app.delete("/agents/:id", async (req) => {

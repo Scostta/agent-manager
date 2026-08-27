@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
 import { deleteAgent } from "@/lib/api";
-import { formatCost, formatRelative } from "@/lib/format";
+import { describeToolPolicy, formatCost, formatRelative } from "@/lib/format";
 import { keys, useAgents } from "@/lib/hooks";
 
 import type { ReactElement } from "react";
@@ -66,6 +66,14 @@ function AgentCard({ agent, onDelete }: { agent: Agent; onDelete: () => void }):
           <Badge variant="ghost" size="xs">
             <Icon name="dollar" size={9} />
             tope {formatCost(agent.maxBudgetUsd)}
+          </Badge>
+        )}
+        {/* Solo cuando hay restricción: lo normal es no tenerla y la insignia
+            en todas las tarjetas sería ruido. */}
+        {(agent.allowedTools.length > 0 || agent.disallowedTools.length > 0) && (
+          <Badge variant="ghost" size="xs">
+            <Icon name="settings" size={9} />
+            {describeToolPolicy(agent)}
           </Badge>
         )}
       </div>
