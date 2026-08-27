@@ -12,6 +12,10 @@ termina y el log guarda con qué se lanzó.
 El ciclo completo está validado en real: spawn del CLI → stream-json → SSE → UI,
 con tokens y coste registrados, y el trabajo saliendo del worktree al repo.
 
+**Las seis fases están cerradas y no hay pendientes.** Lo que queda al final del
+documento está descartado a propósito, no aparcado. Antes de proponer trabajo
+nuevo conviene mirar ahí: alguna de las ideas obvias ya tiene su motivo escrito.
+
 ## Fase 1 — Frontend MVP ✅
 
 1. ✅ **Layout base con sidebar** + header con `/queue/stats`.

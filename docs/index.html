@@ -960,6 +960,10 @@ un resumen breve del trabajo hecho.</code></pre>
 
     <p>El keepalive no es un evento JSON: es una línea de comentario SSE (<code>: ping</code>) cada 30 segundos. Sin ella, una run que pase minutos sin emitir nada haría que el navegador o cualquier proxy intermedio diera la conexión por muerta.</p>
 
+    <div class="callout">
+      <p><strong>El SSE no reemite nada.</strong> El <code>EventSource</code> reconecta solo, pero lo que ocurriera durante el hueco se pierde: no hay buffer ni <code>Last-Event-ID</code>. Quien necesite no perderse nada tiene que preguntarlo al reconectar — es lo que hace el aviso de run terminada, con <code>GET /runs?endedAfter=…</code> en cada <code>onopen</code>.</p>
+    </div>
+
     <p>Los tipos exactos están en <code>apps/api/src/bus.ts</code> (<code>RunEvent</code>, <code>BoardEvent</code>, <code>PlanEvent</code>).</p>
 
     <h3>Arquitectura interna del bus</h3>

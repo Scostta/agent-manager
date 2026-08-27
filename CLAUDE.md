@@ -186,7 +186,8 @@ apps/
   workspace, helpers de git contra repos temporales, dependencias, parseo del
   planificador) y, con BD de verdad, el scanner de skills, el executor, la cola,
   el GC contra disco, el reaper, el scheduler de cuota y las rutas.
-  Son 204 tests; el desglose y por qué existe cada uno está en `docs/06-roadmap.md`.
+  El desglose y por qué existe cada uno está en `docs/06-roadmap.md`, que es
+  donde se lleva la cuenta: aquí solo se quedaría desfasado.
 - **Tests con BD:** `src/test/harness.ts` monta una SQLite temporal aplicando
   los `migration.sql` con `node:sqlite`. **Impórtalo siempre el primero**: fija
   el entorno antes de que `config.ts` y `db.ts` se evalúen, y si `db.ts` carga
@@ -230,9 +231,17 @@ de CLAUDE.md, dashboard de tokens y costes con Recharts, review PR-style sobre
 los worktrees, dependencias entre tasks, control de la cola, GC de workspaces y
 alta guiada de proyectos.
 
-Lo último cerrado (Fase 5): retomar sesiones con `--resume` en vez de relanzar
-de cero, herramientas permitidas por agente, aviso del navegador al terminar una
-run y registro en el log de con qué se lanzó.
+Fase 5: retomar sesiones con `--resume` en vez de relanzar de cero,
+herramientas permitidas por agente, aviso del navegador al terminar una run y
+registro en el log de con qué se lanzó.
+
+Fase 6, la última cerrada: se conectó el `CLAUDE.md` global —que se guardaba y
+no lo veía ningún agente—, se quitaron los campos que no consumía nadie
+(`Agent.status`, `requiredSkillIds`, el scope `agent`), `apps/web` estrenó
+tests, la BD se copia sola al arrancar y los SKILL.md se editan desde la UI.
+
+**El roadmap no tiene pendientes.** Lo que queda en "Cosas que NO se harán" está
+descartado a propósito.
 
 `docs/06-roadmap.md` lleva la cuenta y explica el porqué de cada decisión,
 incluidas las que se descartaron. **Míralo antes de proponer trabajo nuevo**:

@@ -121,6 +121,13 @@ El listener vive en el `AppShell`, no en una ruta: el aviso solo sirve si llega
 estés donde estés. Solo salta con la pestaña de fondo —con el cockpit delante la
 UI ya se actualiza sola— y nunca por una run cancelada, que la cancelaste tú.
 
+El SSE no reemite nada, así que una run que termine mientras el `EventSource`
+reconecta se perdería. Por eso en cada `onopen` —que es también cada
+reconexión— se pregunta a `GET /runs?endedAfter=…` qué ha terminado desde la
+última vez que se supo algo. Estrictamente posterior, no "desde": con `gte`,
+cada reconexión reavisaría de la última run. Lo que llega por el stream se marca
+como visto aunque no se notifique, para que la repesca no lo saque después.
+
 ## Cancelación
 
 `cancelRun(runId)` marca la run en un `Set` de canceladas y después llama a
