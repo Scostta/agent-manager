@@ -78,6 +78,20 @@ export function formatBytes(bytes: number): string {
   return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
 }
 
+/** "Read, Glob" → ["Read","Glob"]. Vacío es "sin restricción", no "ninguna". */
+export function splitTools(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((tool) => tool.trim())
+    .filter(Boolean);
+}
+
+/** Si dos listas escritas a mano dicen lo mismo, para saber qué preset está activo. */
+export function sameTools(a: string, b: string): boolean {
+  // Una coma no puede aparecer dentro de un nombre: es el separador.
+  return splitTools(a).join(",") === splitTools(b).join(",");
+}
+
 /**
  * Con qué restricción de herramientas corre un agente. Sin listas puede
  * ejecutar bash arbitrario en su workspace, así que conviene que se lea.

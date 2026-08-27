@@ -32,7 +32,7 @@ pnpm db:migrate       # aplicar migraciones Prisma
 pnpm db:studio        # abrir Prisma Studio
 pnpm db:seed          # datos de ejemplo
 pnpm typecheck        # typecheck de todo el monorepo
-pnpm test             # tests con node:test (por ahora solo apps/api)
+pnpm test             # tests con node:test (apps/api y apps/web)
 pnpm build            # build de producción
 ```
 
@@ -105,7 +105,8 @@ apps/
         api.ts                   # cliente HTTP + helper SSE
         hooks.ts                 # hooks SWR + streams SSE
         types.ts                 # espejo de los modelos de la API
-        format.ts
+        format.ts                # formateo + helpers de listas de herramientas
+        run-log.ts               # traduce el NDJSON de una run a líneas legibles
 ```
 
 **Convenciones del frontend:**
@@ -167,12 +168,17 @@ apps/
 
 ## Tests
 
-- **Runner:** `node:test` con `tsx`. Sin dependencias de test — no metas vitest
-  ni jest sin permiso explícito.
+- **Runner:** `node:test` con `tsx`, en los dos paquetes. Sin dependencias de
+  test — no metas vitest ni jest sin permiso explícito.
+- **En `apps/web` solo se prueba lógica pura**, sin DOM ni render: por eso lo
+  testeable se extrae del componente a `src/lib/` en vez de montar jsdom. Si
+  algún día hace falta probar un componente de verdad, eso sí hay que hablarlo.
 - **Dónde:** junto al código que prueban, como `foo.test.ts`. `tsconfig.json`
   los typechequea; `tsconfig.build.json` los saca del build junto con
   `src/test/`.
-- **Qué se prueba:** lo que falla en silencio y sale caro. Lógica pura
+- **Qué se prueba:** lo que falla en silencio y sale caro. En la web, el
+  traductor del NDJSON del visor (`lib/run-log.ts`) y los helpers de listas de
+  herramientas. En la API, lógica pura
   (`rateLimit`, `pricing`, `tools`, `resume`, tabla de decisión del GC, copia de
   workspace, helpers de git contra repos temporales, dependencias, parseo del
   planificador) y, con BD de verdad, el scanner de skills, el executor, la cola,
