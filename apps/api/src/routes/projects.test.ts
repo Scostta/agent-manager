@@ -217,3 +217,81 @@ describe("GET /fs/claude-md", () => {
     assert.equal(res.statusCode, 400);
   });
 });
+
+describe("DELETE /projects/:id", () => {
+  /**
+   * Las tasks y las runs se van en cascada; el ClaudeMd no, porque la FK vive
+   * en Project. Sin esto la fila sobrevivía al proyecto y se quedaba en el
+   * editor como un documento "sin asignar" que ya no era de nadie.
+   */
+  test("se lleva el CLAUDE.md del proyecto, que no cae en cascada", async () => {
+    const claudeMd = await db.claudeMd.create({
+      data: { scope: "project", content: "# Del proyecto" },
+    });
+    const project = await db.project.create({
+      data: {
+        name: "con md",
+        repoPath: tempDir("repo"),
+        workspaceStrategy: "copy",
+        claudeMdId: claudeMd.id,
+      },
+    });
+
+    const res = await app.inject({ method: "DELETE", url: `/projects/${project.id}` });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(await db.claudeMd.count({ where: { id: claudeMd.id } }), 0);
+  });
+
+  test("no toca el global ni el de otro proyecto", async () => {
+    const global = await db.claudeMd.create({
+      data: { scope: "global", content: "# Global" },
+    });
+    const ajeno = await db.claudeMd.create({
+      data: { scope: "project", content: "# De otro" },
+    });
+    await db.project.create({
+      data: {
+        name: "otro",
+        repoPath: tempDir("otro"),
+        workspaceStrategy: "copy",
+        claudeMdId: ajeno.id,
+      },
+    });
+    const project = await db.project.create({
+      data: { name: "sin md", repoPath: tempDir("repo"), workspaceStrategy: "copy" },
+    });
+
+    await app.inject({ method: "DELETE", url: `/projects/${project.id}` });
+
+    assert.equal(await db.claudeMd.count(), 2, "solo desaparece el del proyecto borrado");
+    assert.ok(await db.claudeMd.findUnique({ where: { id: global.id } }));
+  });
+
+  test("el fichero en disco sobrevive: es del repo, no nuestro", async () => {
+    const repoPath = tempDir("repo-con-md");
+    const filePath = path.join(repoPath, "CLAUDE.md");
+    await fs.writeFile(filePath, "# Convenciones del repo", "utf8");
+
+    const claudeMd = await db.claudeMd.create({
+      data: { scope: "project", content: "# Convenciones del repo", filePath },
+    });
+    const project = await db.project.create({
+      data: {
+        name: "con fichero",
+        repoPath,
+        workspaceStrategy: "copy",
+        claudeMdId: claudeMd.id,
+      },
+    });
+
+    await app.inject({ method: "DELETE", url: `/projects/${project.id}` });
+
+    await fs.access(filePath); // lanza si lo hemos borrado
+  });
+
+  test("un proyecto que no existe es un 404", async () => {
+    const res = await app.inject({ method: "DELETE", url: "/projects/no-existe" });
+    assert.equal(res.statusCode, 404);
+  });
+});

@@ -35,7 +35,6 @@ model Agent {
   // hasta ahora. Acepta patrones del CLI, p.ej. "Bash(git *)".
   allowedTools    String?
   disallowedTools String?
-  status        String       @default("idle")
   skills        AgentSkill[]
   tasks         Task[]
   runs          TaskRun[]

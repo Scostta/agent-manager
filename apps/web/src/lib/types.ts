@@ -75,7 +75,6 @@ export type Agent = {
   /** Herramientas del CLI que puede usar. Vacías = sin restricción. */
   allowedTools: string[];
   disallowedTools: string[];
-  status: string;
   skills?: { skillId: string; skill: Skill }[];
   _count?: { runs: number };
   createdAt: string;

@@ -534,7 +534,6 @@
           <tr><td><code>model</code></td><td>String</td><td>ID del modelo Claude: <code>claude-opus-5</code>, <code>claude-sonnet-5</code>, <code>claude-haiku-4-5</code>, <code>claude-fable-5</code>…</td></tr>
           <tr><td><code>systemPrompt</code></td><td>String</td><td>Instrucciones de sistema del agente. Se inyectan al inicio del prompt que recibe el CLI</td></tr>
           <tr><td><code>maxBudgetUsd</code></td><td>Float?</td><td>Límite de gasto en USD por run. Si se supera, se mata el proceso. Solo salta mientras lleguen eventos de tokens: una run muda no la para nadie (para eso está <code>RUN_TIMEOUT_MS</code>)</td></tr>
-          <tr><td><code>status</code></td><td>String</td><td><code>idle</code> | <code>running</code> | <code>paused</code> | <code>disabled</code></td></tr>
           <tr><td><code>allowedTools</code></td><td>String?</td><td>Array JSON de herramientas del CLI que puede usar. <code>null</code> = sin restricción. Acepta patrones: <code>Bash(git *)</code></td></tr>
           <tr><td><code>disallowedTools</code></td><td>String?</td><td>Array JSON de herramientas prohibidas. Es lo que permite "todo menos Bash" sin enumerar el resto</td></tr>
           <tr><td><code>skills</code></td><td>AgentSkill[]</td><td>Relación muchos-a-muchos con Skills habilitadas para este agente</td></tr>
@@ -1003,7 +1002,7 @@ un resumen breve del trabajo hecho.</code></pre>
           <tr><td><span class="badge badge-green">POST</span></td><td><code>/projects</code></td><td>Crea un proyecto</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/projects/:id</code></td><td>Proyecto con tasks y claudeMd</td></tr>
           <tr><td><span class="badge badge-yellow">PATCH</span></td><td><code>/projects/:id</code></td><td>Actualiza nombre / descripción / repoPath</td></tr>
-          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/projects/:id</code></td><td>Borra proyecto en cascada</td></tr>
+          <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/projects/:id</code></td><td>Borra el proyecto, sus tasks y sus runs. También su <code>ClaudeMd</code>, que no cae en cascada; el fichero en disco se queda</td></tr>
           <tr><td><span class="badge badge-blue">GET</span></td><td><code>/projects/:id/tasks</code></td><td>Tasks del proyecto con su última run y el gasto acumulado de todas</td></tr>
           <tr><td><span class="badge badge-green">POST</span></td><td><code>/projects/:id/plan</code></td><td>Pide al CLI un backlog inicial. No es una <code>TaskRun</code>: no pasa por la cola ni entra en el dashboard</td></tr>
           <tr><td><span class="badge badge-red">DELETE</span></td><td><code>/projects/:id/plan</code></td><td>Cancela esa planificación</td></tr>
