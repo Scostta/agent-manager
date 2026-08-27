@@ -31,7 +31,7 @@ API de Anthropic, spawnea el binario.
 - `pnpm db:migrate` — migraciones Prisma
 - `pnpm db:studio` — GUI de la BD
 - `pnpm typecheck` — typecheck monorepo
-- `pnpm test` — tests con `node:test` (por ahora solo `apps/api`)
+- `pnpm test` — tests con `node:test` (`apps/api` y `apps/web`)
 - `pnpm db:seed` — datos de ejemplo
 
 ## Flujos habituales
@@ -63,15 +63,20 @@ Las migraciones son historia: no edites una ya aplicada. El harness de tests las
 aplica tal cual, así que una migración mal escrita se ve enseguida en verde o rojo.
 
 ### Añadir un test
-1. Junto al código que prueba, como `foo.test.ts`.
-2. Si necesita BD, **importa `src/test/harness.js` el primero de todo**: fija el
+1. Junto al código que prueba, como `foo.test.ts`. En `apps/web` los tests
+   corren con el mismo `node:test` + tsx, y el alias `@/` se resuelve.
+2. **En la web solo se prueba lógica pura.** No hay DOM ni render: si lo que
+   quieres probar vive dentro de un componente, sácalo a `src/lib/` primero —
+   es lo que se hizo con `formatLogLine`. Montar jsdom es una dependencia
+   nueva y hay que hablarla.
+3. Si necesita BD, **importa `src/test/harness.js` el primero de todo**: fija el
    entorno antes de que `config.ts` y `db.ts` se evalúen. Si `db.ts` carga antes,
    el cliente se conecta al `dev.db` real.
-3. Nada de mockear Prisma, y nada de spawnear el CLI: se sustituye
+4. Nada de mockear Prisma, y nada de spawnear el CLI: se sustituye
    `runtime.spawn` por un proceso simulado que escupe stream-json.
-4. Para probar qué se encola sin ejecutarlo, `stopEverything()` deja la cola en
+5. Para probar qué se encola sin ejecutarlo, `stopEverything()` deja la cola en
    pausa.
-5. **Valida el test reintroduciendo el bug que cubre.** Si sigue en verde con el
+6. **Valida el test reintroduciendo el bug que cubre.** Si sigue en verde con el
    bug dentro, no vale — y a veces lo que descubres es que el "bug" no cambiaba
    nada observable, que también es información.
 

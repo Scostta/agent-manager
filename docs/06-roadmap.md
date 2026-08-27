@@ -72,7 +72,8 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-225 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+255 tests con `node:test`, sin dependencias nuevas: 225 en `apps/api` y 30 en
+`apps/web`. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
@@ -243,11 +244,25 @@ documento "sin asignar" que ya no era de nadie. Ahora la ruta lo borra.
 El fichero en disco se conserva: ese es del repo, no del cockpit. Hay test de
 las dos cosas — que la fila se va y que el fichero se queda.
 
-### Pendientes de la misma revisión
+### Tests en `apps/web` ✅
 
-- **Tests en `apps/web`.** El primero que hace falta es `formatLogLine` del visor
-  de runs: traduce cada evento del stream-json a una línea legible, y es justo
-  lo que se rompe en silencio cuando el CLI cambia la forma de un evento.
+30 tests, con el mismo `node:test` + tsx que la API y sin dependencias nuevas.
+La regla: **solo lógica pura, sin DOM ni render.** Lo testeable se saca del
+componente a `src/lib/` en vez de montar jsdom — si algún día hace falta probar
+un componente de verdad, eso ya es una dependencia que hay que hablar.
+
+El primero era `formatLogLine`, ahora en `lib/run-log.ts`: traduce cada evento
+del stream-json a la línea que ves en el visor. Cuando el CLI cambie la forma de
+un evento no saltará ningún error, simplemente dejarás de ver parte del log —
+que es la peor manera de enterarte. Cubre los bloques del asistente, los
+resultados de herramienta con su truncado, el evento final, la línea de petición
+del cockpit y la salida que no es JSON.
+
+De paso, `splitTools`/`sameTools` salieron del editor de agentes a
+`lib/format.ts`, junto a `describeToolPolicy` que ya vivía ahí.
+
+### Pendientes
+
 - **Export/backup** y **editar SKILL.md desde la UI**, que ya venían de la Fase 5.
 - **El aviso de run terminada no tiene replay**: una run que termine mientras el
   `EventSource` reconecta no avisa nunca.

@@ -18,7 +18,7 @@ import {
 import { useToast } from "@/components/ui/toast.client";
 import { createAgent, updateAgent } from "@/lib/api";
 import { keys, useAgent, useSkills } from "@/lib/hooks";
-import { describeToolPolicy } from "@/lib/format";
+import { describeToolPolicy, sameTools, splitTools } from "@/lib/format";
 import { MODELS } from "@/lib/types";
 
 import type { ReactElement } from "react";
@@ -42,19 +42,6 @@ const TOOL_PRESETS = [
   { label: "Solo lectura", allowed: "Read, Glob, Grep", disallowed: "" },
   { label: "Todo menos Bash", allowed: "", disallowed: "Bash" },
 ] as const;
-
-/** "Read, Glob" → ["Read","Glob"]. Vacío es "sin restricción", no "ninguna". */
-function splitTools(raw: string): string[] {
-  return raw
-    .split(",")
-    .map((tool) => tool.trim())
-    .filter(Boolean);
-}
-
-function sameTools(a: string, b: string): boolean {
-  // Una coma no puede aparecer dentro de un nombre: es el separador.
-  return splitTools(a).join(",") === splitTools(b).join(",");
-}
 
 function Field({
   label,
