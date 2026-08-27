@@ -5,6 +5,10 @@
 Backend completo con estrategia híbrida worktree/copy y compatibilidad Windows.
 Frontend con todas las pantallas del MVP y el dashboard de consumo.
 
+Las runs ya no son de un solo tiro: se pueden retomar con `--resume`, cada
+agente decide qué herramientas del CLI puede usar, el navegador avisa cuando una
+termina y el log guarda con qué se lanzó.
+
 El ciclo completo está validado en real: spawn del CLI → stream-json → SSE → UI,
 con tokens y coste registrados, y el trabajo saliendo del worktree al repo.
 
@@ -68,7 +72,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-146 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
+204 tests con `node:test`, sin dependencias nuevas. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
 - **Scanner de skills**: indexado, frontmatter roto, borrados y el watcher de
@@ -101,60 +105,96 @@ respaldo, igual que ya hacía el commit inicial.
   mano, y que un reinicio de la API no pierda la espera.
 - **Reaper**: cierra las runs que quedaron vivas y devuelve sus tasks a `todo`
   sin tocar el historial ni la columna donde tú las hayas dejado.
+- **Herramientas por agente**: que sin listas no salga ningún flag (un
+  `--allowedTools` vacío sería "ninguna herramienta"), que un JSON roto no tumbe
+  la run, que un patrón con espacios no se parta en varios argv, que la
+  restricción sobreviva al retomar una sesión, y que un PATCH parcial no borre
+  los permisos que no menciona.
+- **Aviso y registro**: que el `run_finished` lleve título y agente dentro (si
+  no, el navegador tendría que ir a buscarlos), que avise también la run que ni
+  arranca —el silencio más caro— y que la línea de petición vaya la primera y no
+  repita el prompt dentro de los flags.
+- **Continuar sesión**: qué se puede retomar y qué no, que el CLI se llame con
+  `--resume` y el prompt corto desde el workspace del padre, que una
+  continuación fallida no borre el workspace que no es suyo, que la cuota
+  agotada lo conserve mientras un fallo normal sí se limpia, y que el GC no
+  feche una carpeta por la run que le da nombre sino por la última que la usó.
 
 Los tests se validan reintroduciendo el bug que cubren: si el test sigue en
 verde con el bug dentro, no cuenta. Así apareció el hueco del reaper (faltaba el
 caso mixto: historial y huérfana conviviendo en la misma BD).
 
-## Fase 5 — Candidatos (nada empezado)
+## Fase 5 ✅
 
 Ordenados por lo que aportan. Salieron de revisar el código, no de una lluvia de
 ideas: cada uno apunta al sitio concreto que lo justifica.
 
-### 1. Continuar una sesión en vez de relanzarla
+### 1. Continuar una sesión en vez de relanzarla ✅
 
-Hoy cada run es un `-p` de un solo tiro, y los tres modos de retry (`wait`,
-`api_key`, `now`) relanzan desde cero: el agente vuelve a leerse el repo y se
-paga otra vez. Pero al revisar un diff lo natural es "casi, pero cambia X", y
-para eso hay que crear otra task o reintentar entera.
+El `session_id` del evento `init` se guarda en `TaskRun`, y con él `--resume`
+sigue la conversación en vez de reconstruirla. Una continuación es una
+`TaskRun` nueva con `resumedFromId`: hereda el workspace y la rama del padre
+—el CLI busca las sesiones por directorio— y no las limpia, porque no son suyas.
 
-El CLI acepta `--resume <sessionId>` y el `session_id` ya llega en el evento
-`init` del stream-json — simplemente no se guarda. Serían: una columna en
-`TaskRun`, guardarlo al parsear, y un botón "Seguir con instrucciones" en el
-visor de run. **Toca el schema de Prisma: hablarlo antes.**
+- **"Seguir con instrucciones"** en el visor de run, que es lo natural al
+  revisar un diff. Falla si la sesión no se puede retomar en vez de relanzar de
+  cero: quien pide un ajuste no espera pagar una run entera.
+- **Los tres modos de retry** retoman si pueden y avisan de cuál fue. Para que
+  puedan, una run cortada por cuota ya no borra su workspace: se conservan tanto
+  el sitio al que volver como el trabajo hecho antes del corte.
+- El GC fecha cada carpeta por la run más reciente que la usó, no por la que le
+  da nombre, y no toca una donde haya una continuación viva.
 
-Es el cambio que más tiempo y dinero ahorra por línea escrita.
+Detalles en `docs/04-runner.md`.
 
-### 2. Qué herramientas puede usar cada agente
+### 2. Qué herramientas puede usar cada agente ✅
 
-Todas las runs salen con `--permission-mode acceptEdits` y sin `--allowedTools`
-(`executor.ts`), así que cualquier agente puede ejecutar bash arbitrario en su
-workspace. Un agente revisor o documentador debería poder ser solo lectura; el
-precedente ya existe: el planificador corre con `--allowedTools Read,Glob,Grep`.
-Un campo en `Agent` y un arg más en el spawn.
+`Agent` tiene `allowedTools` y `disallowedTools`, y el spawn añade los flags
+correspondientes. Sin listas no se añade nada, así que los agentes que ya
+existían corren exactamente igual que antes.
 
-### 3. Decidir qué es `requiredSkillIds`
+Las dos listas y no solo la de permitidas porque la lista de herramientas del
+CLI crece con cada versión: expresar "todo menos Bash" con una allowlist obliga
+a enumerar el resto y se queda obsoleta sola.
 
-Se guarda, se valida y se pinta en la tarjeta y el drawer, y **no lo consume
-nadie**: el executor inyecta las skills del *agente* (`agent.skills`), no las
-que la task declara requerir. Marcar una skill en una task hoy no cambia nada de
-lo que ve el agente.
+La UI del agente trae los tres casos como atajos (Todo / Solo lectura / Todo
+menos Bash) y deja escribir a mano lo que sea, patrones del CLI incluidos. El
+`Reviewer` del seed pasa a ser de solo lectura: su prompt ya decía "no
+implementas", pero hasta ahora eso era una petición, no una restricción.
 
-O se conecta (que las requeridas se inyecten, o que avisen de que el agente
-asignado no las tiene) o se quita. Un campo decorativo en el modelo de dominio
-envenena las decisiones que vengan después. Esto es decidir, no construir.
+### 3. Decidir qué es `requiredSkillIds` ✅ — se quita
 
-### 4. Avisar cuando una run termina
+Se guardaba, se validaba y se pintaba, y no lo consumía nadie: el executor
+inyecta las skills del *agente*, no las que la task declaraba requerir. Marcar
+una skill en una task no cambiaba nada de lo que veía el agente.
 
-Una run tarda minutos y el cockpit no avisa: sin la pestaña delante, no te
-enteras. Una notificación del navegador al pasar a `review` o `failed` basta.
-Orquestar agentes y tener que vigilarlos se contradice.
+Decisión: fuera. Las skills ya están conectadas a los agentes, que es donde el
+executor las lee. Un campo decorativo en el modelo de dominio envenena las
+decisiones que vengan después.
 
-### 5. Registrar el prompt que se envió
+Con él se va toda su fontanería: el `skills` que atravesaba `Column` →
+`TaskCard` → `TaskDrawer` sin más uso que pintarlo, y el `useSkills()` del
+kanban. La ruta ignora el campo si llega (Zod descarta lo que no conoce), que es
+lo que pasa con una pestaña abierta con el bundle viejo.
 
-`buildPrompt()` compone systemPrompt + task + skills, y el NDJSON solo guarda lo
-que devuelve el CLI. Cuando una run sale rara no hay forma de ver qué se le
-pidió. Escribirlo como primera línea del log y listo.
+### 4. Avisar cuando una run termina ✅
+
+El executor emite `run_finished` por el canal `board` con lo justo para pintar
+el aviso sin pedir nada más. El listener vive en el `AppShell` —el aviso solo
+sirve si llega estés donde estés— y hay un interruptor en la cabecera que pide
+permiso al pulsarlo, que es el gesto que los navegadores esperan.
+
+Solo salta con la pestaña de fondo: con el cockpit delante la UI ya se actualiza
+sola y avisar encima sería ruido. Al activarlo se lanza un aviso de prueba,
+porque si no quien lo enciende y se queda mirando no ve nada y lo da por roto.
+Una run cancelada no avisa: la cancelaste tú.
+
+### 5. Registrar el prompt que se envió ✅
+
+Primera línea del NDJSON, escrita antes del spawn para que la run que ni
+arranca también deje constancia: modelo, flags (sin el `-p`, que duplicaría el
+prompt), de qué run se retoma y el prompt entero. El visor la pinta como un
+bloque aparte; los logs viejos se leen igual.
 
 ### Menores
 

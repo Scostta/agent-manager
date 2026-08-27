@@ -7,4 +7,7 @@
 - [05 — Guía de desarrollo](./05-development.md)
 - [06 — Roadmap](./06-roadmap.md)
 
+Además, [`index.html`](./index.html) es un documento único con toda la referencia
+técnica en un solo scroll — ábrelo en el navegador.
+
 Para **Claude Code**, ver `CLAUDE.md` en la raíz.

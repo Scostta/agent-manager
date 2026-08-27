@@ -31,6 +31,10 @@ Base URL: `http://localhost:3001`.
 - `POST /agents` — `{ name, role, model, systemPrompt, maxBudgetUsd?, skillIds? }`
 - `PATCH /agents/:id` (si pasas `skillIds`, reemplaza el set)
 - `DELETE /agents/:id`
+- `allowedTools` / `disallowedTools`: arrays de nombres de herramientas. Se
+  guardan como JSON string y vuelven ya parseados. Lista vacía = se guarda
+  `null` (sin restricción): un `[]` significaría "ninguna herramienta".
+  Aceptan patrones del CLI, p.ej. `Bash(git *)`.
 
 ## Skills
 - `GET /skills`
@@ -52,6 +56,14 @@ Base URL: `http://localhost:3001`.
 - `GET /runs/:runId`
 - `POST /runs/:runId/cancel`
 - `GET /runs/:runId/diff` — solo si worktree, devuelve diff contra main/master.
+- `POST /runs/:runId/retry` — `{ mode: "wait" | "api_key" | "now" }` para una run
+  cortada por cuota. Devuelve `{ runId, resumed }`: `resumed` dice si retomó la
+  sesión o tuvo que empezar de cero.
+- `GET /runs/:runId/resume` — `{ canResume, reason, sessionId }`. Se calcula del
+  estado real (hay sesión guardada y el workspace sigue en disco), no de la BD sola.
+- `POST /runs/:runId/resume` — `{ prompt }`. Encadena una run que sigue la
+  conversación de esta en su mismo workspace. 400 si no se puede retomar: aquí no
+  se relanza de cero por lo bajini.
 
 ## Queue
 - `GET /queue/stats` — `{ pending, waiting, concurrency }`
