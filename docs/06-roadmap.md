@@ -72,7 +72,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-270 tests con `node:test`, sin dependencias nuevas: 240 en `apps/api` y 30 en
+287 tests con `node:test`, sin dependencias nuevas: 257 en `apps/api` y 30 en
 `apps/web`. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
@@ -201,7 +201,7 @@ arranca también deje constancia: modelo, flags (sin el `-p`, que duplicaría el
 prompt), de qué run se retoma y el prompt entero. El visor la pinta como un
 bloque aparte; los logs viejos se leen igual.
 
-## Fase 6 — Campos que no hacían nada
+## Fase 6 ✅ — Lo que no hacía nada, y lo que faltaba
 
 Salió de revisar el proyecto al cerrar la Fase 5.
 
@@ -285,11 +285,38 @@ interpretarlo como "no conserves ninguna" sería lo contrario de lo que quiere
 quien la desactiva. Tiene su test, como que la poda no toque ficheros que no ha
 puesto ella.
 
-### Pendientes
+### Editar SKILL.md desde la UI ✅
 
-- **Editar SKILL.md desde la UI**, que ya venía de la Fase 5.
-- **El aviso de run terminada no tiene replay**: una run que termine mientras el
-  `EventSource` reconecta no avisa nunca.
+El catálogo era solo lectura. Ahora se edita con el mismo Monaco que CLAUDE.md:
+al guardar se escribe en disco y se reindexa al momento, sin esperar a chokidar
+—el watcher lo vería igual, pero durante ese instante la ficha enseñaría el hash
+y los tags viejos.
+
+Tres guardas antes de tocar el fichero, y las tres tienen test:
+
+- **El frontmatter tiene que parsear.** El scanner ya captura un YAML roto y
+  sigue, así que guardarlo no rompe nada… pero deja la skill con los metadatos
+  viejos y sin decírtelo. Mejor negarse cuando puedes arreglarlo.
+- **El `name` no puede cambiar.** Es la clave del upsert del scanner:
+  renombrarlo desde el editor crearía una segunda entrada apuntando al mismo
+  fichero.
+- **La ruta tiene que estar dentro de `SKILLS_PATHS`.** El `filePath` sale de la
+  BD, y una fila tocada a mano convertiría el endpoint en un "escribe donde
+  quieras" con los permisos de la API.
+
+Crear y borrar SKILL.md se queda fuera: eso es tu editor y un `mkdir`.
+
+### Repesca de avisos perdidos ✅
+
+El SSE no reemite nada, así que una run que terminara mientras el
+`EventSource` reconectaba no avisaba nunca. `GET /runs` acepta ahora
+`endedAfter`, y el hook pregunta en cada `onopen` —que es también cada
+reconexión— qué ha terminado desde la última vez que supo algo.
+
+Estrictamente posterior, no "desde": con `gte` cada reconexión reavisaría de la
+última run. Y las que llegan por el stream se marcan como vistas aunque no se
+notifiquen (pestaña delante, o canceladas), para que la repesca no las saque
+después.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

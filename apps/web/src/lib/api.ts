@@ -133,6 +133,10 @@ export const listSkills = () => api<Skill[]>("/skills");
 export const getSkillContent = (id: string) =>
   api<SkillContent>(`/skills/${id}/content`);
 
+/** Escribe el SKILL.md en disco. La API valida el frontmatter antes de tocarlo. */
+export const updateSkillContent = (id: string, content: string) =>
+  api<Skill>(`/skills/${id}/content`, { method: "PATCH", ...json({ content }) });
+
 export const rescanSkills = () =>
   api<{ ok: true; indexed: number }>("/skills/rescan", { method: "POST" });
 
@@ -206,6 +210,8 @@ export type RunFilters = {
   taskId?: string;
   agentId?: string;
   status?: RunStatus;
+  /** ISO. Runs terminadas después de ese instante; para recuperar avisos perdidos. */
+  endedAfter?: string;
   limit?: number;
   offset?: number;
 };

@@ -42,6 +42,13 @@ const RunsQuery = z.object({
   status: z
     .enum(["queued", "running", "succeeded", "failed", "cancelled"])
     .optional(),
+  /**
+   * Runs terminadas después de este instante. Es lo que permite al aviso del
+   * navegador recuperar lo que se perdió mientras el EventSource reconectaba:
+   * el SSE no reemite nada, así que sin esto una run que termine justo en ese
+   * hueco no avisa nunca.
+   */
+  endedAfter: z.coerce.date().optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -53,15 +60,15 @@ export async function runRoutes(app: FastifyInstance) {
    * invisibles pese a estar en la BD.
    */
   app.get("/runs", async (req) => {
-    const { projectId, taskId, agentId, status, limit, offset } = RunsQuery.parse(
-      req.query ?? {},
-    );
+    const { projectId, taskId, agentId, status, endedAfter, limit, offset } =
+      RunsQuery.parse(req.query ?? {});
 
     const where = {
       ...(taskId ? { taskId } : {}),
       ...(agentId ? { agentId } : {}),
       ...(status ? { status } : {}),
       ...(projectId ? { task: { projectId } } : {}),
+      ...(endedAfter ? { endedAt: { gt: endedAfter } } : {}),
     };
 
     const [runs, total] = await Promise.all([

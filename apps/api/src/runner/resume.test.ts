@@ -249,3 +249,81 @@ describe("rutas de continuación", () => {
     assert.equal(await db.taskRun.count(), 1);
   });
 });
+
+describe("GET /runs?endedAfter", () => {
+  /**
+   * Es lo que hace posible repescar los avisos perdidos: el SSE no reemite
+   * nada, así que al reconectar el navegador pregunta qué terminó desde la
+   * última vez que supo algo.
+   */
+  async function seedEnded(endedAt: Date, status = "succeeded"): Promise<string> {
+    const base = await seedRun();
+    const run = await db.taskRun.update({
+      where: { id: base.id },
+      data: { status, endedAt },
+    });
+    return run.id;
+  }
+
+  test("devuelve solo lo que terminó después del instante dado", async () => {
+    const vieja = await seedEnded(new Date("2026-08-27T10:00:00Z"));
+    const nueva = await seedEnded(new Date("2026-08-27T12:00:00Z"));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/runs?endedAfter=2026-08-27T11:00:00.000Z",
+    });
+
+    assert.equal(res.statusCode, 200);
+    const ids = res.json().runs.map((run: { id: string }) => run.id);
+    assert.deepEqual(ids, [nueva]);
+    assert.ok(!ids.includes(vieja));
+  });
+
+  test("el instante exacto no se repite: es estrictamente posterior", async () => {
+    const justo = new Date("2026-08-27T12:00:00Z");
+    await seedEnded(justo);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/runs?endedAfter=${justo.toISOString()}`,
+    });
+
+    assert.deepEqual(res.json().runs, [], "si no, cada reconexión reavisaría de la última");
+  });
+
+  test("una run sin terminar no aparece", async () => {
+    const base = await seedRun();
+    await db.taskRun.update({
+      where: { id: base.id },
+      data: { status: "running", endedAt: null },
+    });
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/runs?endedAfter=2020-01-01T00:00:00.000Z",
+    });
+
+    assert.deepEqual(res.json().runs, []);
+  });
+
+  test("se combina con los demás filtros", async () => {
+    await seedEnded(new Date("2026-08-27T12:00:00Z"), "succeeded");
+    const fallida = await seedEnded(new Date("2026-08-27T12:30:00Z"), "failed");
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/runs?endedAfter=2026-08-27T11:00:00.000Z&status=failed",
+    });
+
+    assert.deepEqual(
+      res.json().runs.map((run: { id: string }) => run.id),
+      [fallida],
+    );
+  });
+
+  test("una fecha ilegible es un 400, no un 500", async () => {
+    const res = await app.inject({ method: "GET", url: "/runs?endedAfter=ayer" });
+    assert.equal(res.statusCode, 400);
+  });
+});
