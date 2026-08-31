@@ -163,7 +163,7 @@ export function TaskDrawer({
           </Select>
           {selectedAgent && (
             <div className="flex items-center gap-2.5 rounded-md border border-border-1 bg-bg-3 px-2.5 py-2">
-              <AgentAvatar name={selectedAgent.name} size={28} />
+              <AgentAvatar name={selectedAgent.name} color={selectedAgent.color} size={28} />
               <div className="min-w-0">
                 <div className="text-base font-medium text-txt-1">{selectedAgent.name}</div>
                 <div className="truncate-1 text-xs text-txt-3">

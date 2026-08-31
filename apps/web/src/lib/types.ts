@@ -72,6 +72,8 @@ export type Agent = {
   model: string;
   systemPrompt: string;
   maxBudgetUsd: number | null;
+  /** Color del avatar, hex. null = se deriva del nombre. */
+  color: string | null;
   /** Herramientas del CLI que puede usar. Vacías = sin restricción. */
   allowedTools: string[];
   disallowedTools: string[];
@@ -251,7 +253,7 @@ export type RunWithContext = TaskRun & { task: Task; agent: Agent };
 /** Fila de GET /runs: solo lo justo de task y agente para pintar la tabla. */
 export type RunListItem = TaskRun & {
   task: { id: string; title: string; projectId: string };
-  agent: { id: string; name: string; model: string };
+  agent: { id: string; name: string; model: string; color: string | null };
 };
 
 export type RunList = {

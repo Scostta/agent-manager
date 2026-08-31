@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSWRConfig } from "swr";
 
@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
 import { createAgent, updateAgent } from "@/lib/api";
-import { keys, useAgent, useSkills } from "@/lib/hooks";
+import { keys, useAgent, useAgents, useSkills } from "@/lib/hooks";
+import { AGENT_COLORS, pickAgentColor, resolveAgentColor } from "@/lib/agent-color";
 import { describeToolPolicy, sameTools, splitTools } from "@/lib/format";
 import { MODELS } from "@/lib/types";
 
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
   model: MODELS[0] as string,
   systemPrompt: "",
   maxBudgetUsd: "",
+  color: "",
   allowedTools: "",
   disallowedTools: "",
 } as const;
@@ -74,6 +76,7 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
     model: string;
     systemPrompt: string;
     maxBudgetUsd: string;
+    color: string;
     allowedTools: string;
     disallowedTools: string;
   }>({ ...EMPTY_FORM });
@@ -90,6 +93,7 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
       model: agent.model,
       systemPrompt: agent.systemPrompt,
       maxBudgetUsd: agent.maxBudgetUsd == null ? "" : String(agent.maxBudgetUsd),
+      color: resolveAgentColor(agent),
       allowedTools: agent.allowedTools.join(", "),
       disallowedTools: agent.disallowedTools.join(", "),
     });
@@ -103,6 +107,15 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
     setSkillIds((current) =>
       current.includes(id) ? current.filter((s) => s !== id) : [...current, id],
     );
+
+  // Al crear, se propone el color menos usado para no repetir ninguno. Es solo
+  // la propuesta: en cuanto tocas una muestra manda lo que elijas.
+  const { data: agents } = useAgents();
+  const suggested = useMemo(
+    () => pickAgentColor((agents ?? []).map((a) => a.color)),
+    [agents],
+  );
+  const color = form.color || suggested;
 
   const toolPolicySummary = describeToolPolicy({
     allowedTools: splitTools(form.allowedTools),
@@ -124,6 +137,7 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
       model: form.model,
       systemPrompt: form.systemPrompt.trim(),
       maxBudgetUsd: form.maxBudgetUsd === "" ? undefined : budget,
+      color,
       skillIds,
       allowedTools: splitTools(form.allowedTools),
       disallowedTools: splitTools(form.disallowedTools),
@@ -170,7 +184,7 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
     <div className="h-full overflow-y-auto px-7 py-6">
       <div className="mx-auto flex max-w-2xl flex-col gap-4">
         <div className="flex items-center gap-3">
-          <AgentAvatar name={form.name || "??"} size={36} />
+          <AgentAvatar name={form.name || "??"} color={color} size={36} />
           <div className="min-w-0">
             <h1 className="text-lg font-semibold text-txt-1">
               {agentId ? form.name || "Agente" : "Nuevo agente"}
@@ -231,6 +245,30 @@ export function AgentEditor({ agentId }: { agentId: string | null }): ReactEleme
             />
           </Field>
         </div>
+
+        <Field
+          label="Color"
+          hint="Para distinguirlo de un vistazo en el kanban y en el historial."
+        >
+          <div className="flex flex-wrap gap-2">
+            {AGENT_COLORS.map((swatch) => (
+              <button
+                key={swatch}
+                type="button"
+                onClick={() => set("color", swatch)}
+                aria-label={`Color ${swatch}`}
+                aria-pressed={color === swatch}
+                title={swatch}
+                className="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110"
+                style={{
+                  background: `${swatch}28`,
+                  borderColor: color === swatch ? swatch : `${swatch}60`,
+                  boxShadow: color === swatch ? `0 0 0 2px ${swatch}40` : undefined,
+                }}
+              />
+            ))}
+          </div>
+        </Field>
 
         <Field
           label="Prompt de sistema"

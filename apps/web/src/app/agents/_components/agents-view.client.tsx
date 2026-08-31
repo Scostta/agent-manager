@@ -31,7 +31,7 @@ function AgentCard({ agent, onDelete }: { agent: Agent; onDelete: () => void }):
   return (
     <div className="flex flex-col rounded-lg border border-border-1 bg-bg-3 p-4 transition-colors hover:border-border-3">
       <div className="mb-3 flex items-start gap-2.5">
-        <AgentAvatar name={agent.name} size={32} />
+        <AgentAvatar name={agent.name} color={agent.color} size={32} />
         <div className="min-w-0 flex-1">
           <Link
             href={`/agents/${agent.id}`}

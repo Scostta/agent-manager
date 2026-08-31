@@ -80,7 +80,7 @@ export function TaskCardBody({
       <div className="flex flex-wrap items-center gap-1.5">
         {task.assignedAgent && (
           <span className="flex items-center gap-1.5">
-            <AgentAvatar name={task.assignedAgent.name} size={16} />
+            <AgentAvatar name={task.assignedAgent.name} color={task.assignedAgent.color} size={16} />
             <span className="text-xs text-txt-3">{task.assignedAgent.name}</span>
           </span>
         )}

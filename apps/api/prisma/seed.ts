@@ -11,6 +11,9 @@ async function main() {
       name: "Developer",
       role: "developer",
       model: "claude-opus-5",
+      // Distintos a propósito: dos agentes del mismo color no se distinguen
+      // de un vistazo en el kanban ni en el historial.
+      color: "#7B6CF6",
       systemPrompt:
         "Eres un desarrollador senior. Implementas las tareas siguiendo las convenciones del repo. Escribes código limpio y tests cuando tenga sentido.",
     },
@@ -24,6 +27,7 @@ async function main() {
       name: "Reviewer",
       role: "reviewer",
       model: "claude-opus-5",
+      color: "#3FBA6E",
       systemPrompt:
         "Eres un code reviewer riguroso. Revisas el trabajo de otros agentes, señalas problemas de seguridad, rendimiento y estilo. No implementas.",
       // "No implementas" en el prompt es una petición; esto es lo que lo hace

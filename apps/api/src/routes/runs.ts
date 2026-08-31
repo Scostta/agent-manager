@@ -76,7 +76,7 @@ export async function runRoutes(app: FastifyInstance) {
         where,
         include: {
           task: { select: { id: true, title: true, projectId: true } },
-          agent: { select: { id: true, name: true, model: true } },
+          agent: { select: { id: true, name: true, model: true, color: true } },
         },
         orderBy: { startedAt: "desc" },
         take: limit,

@@ -3,6 +3,7 @@
 import { forwardRef } from "react";
 
 import { Icon } from "@/components/ui/icon";
+import { resolveAgentColor } from "@/lib/agent-color";
 
 import type {
   ButtonHTMLAttributes,
@@ -184,24 +185,20 @@ export const Button = forwardRef<
 
 /* ── AgentAvatar ──────────────────────────────────────────────────────────── */
 
-export const AGENT_COLORS = [
-  "#7B6CF6",
-  "#3FBA6E",
-  "#E05050",
-  "#C9961A",
-  "#4A9EE8",
-  "#D9784A",
-  "#B06CB0",
-] as const;
-
-/** Color estable derivado del nombre: la API no guarda color por agente. */
-export function agentColor(name: string): string {
-  const sum = name.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return AGENT_COLORS[Math.abs(sum) % AGENT_COLORS.length];
-}
-
-export function AgentAvatar({ name, size = 24 }: { name: string; size?: number }): ReactElement {
-  const color = agentColor(name || "??");
+/**
+ * El color se le pasa desde fuera (`agent.color`). Sin él cae en el hash del
+ * nombre, que es lo que hacían todos antes de que el color se guardara.
+ */
+export function AgentAvatar({
+  name,
+  color: given,
+  size = 24,
+}: {
+  name: string;
+  color?: string | null;
+  size?: number;
+}): ReactElement {
+  const color = resolveAgentColor({ name: name || "??", color: given });
   return (
     <span
       className="inline-flex shrink-0 items-center justify-center rounded-full border font-semibold"

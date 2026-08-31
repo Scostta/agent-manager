@@ -79,7 +79,7 @@ function RunRow({ run }: { run: RunListItem }): ReactElement {
       </span>
 
       <span className="flex min-w-0 items-center gap-2">
-        <AgentAvatar name={run.agent.name} size={20} />
+        <AgentAvatar name={run.agent.name} color={run.agent.color} size={20} />
         <span className="flex min-w-0 flex-col leading-tight">
           <span className="truncate-1 text-txt-2">{run.agent.name}</span>
           <span className="truncate-1 text-2xs text-txt-3">{run.agent.model}</span>
