@@ -1,7 +1,13 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { describeToolPolicy, sameTools, splitTools } from "@/lib/format";
+import {
+  describeToolPolicy,
+  sameTools,
+  slugifySkillName,
+  slugifySkillNameDraft,
+  splitTools,
+} from "@/lib/format";
 
 /**
  * Lo que el editor de agentes usa para traducir entre las dos listas escritas a
@@ -63,5 +69,74 @@ describe("describeToolPolicy", () => {
       describeToolPolicy({ allowedTools: ["Read"], disallowedTools: ["Bash"] }),
       "solo Read · sin Bash",
     );
+  });
+});
+
+describe("slugifySkillName", () => {
+  test("lo que ya es válido se queda igual", () => {
+    assert.equal(slugifySkillName("revisar-migraciones"), "revisar-migraciones");
+  });
+
+  test("mayúsculas y espacios se normalizan", () => {
+    assert.equal(slugifySkillName("Revisar Migraciones"), "revisar-migraciones");
+  });
+
+  // Borrar el acento en vez de transliterarlo dejaría "migracin".
+  test("los acentos se transliteran, no se pierden", () => {
+    assert.equal(slugifySkillName("Migración SQL"), "migracion-sql");
+    assert.equal(slugifySkillName("diseño ágil"), "diseno-agil");
+  });
+
+  test("los separadores no se acumulan ni sobran en los bordes", () => {
+    assert.equal(slugifySkillName("  a // b  "), "a-b");
+    assert.equal(slugifySkillName("---x---"), "x");
+    assert.equal(slugifySkillName("a__b..c"), "a-b-c");
+  });
+
+  // Lo que la guarda del servidor rechaza por escribir fuera del workspace.
+  test("una ruta deja de serlo", () => {
+    assert.equal(slugifySkillName("../fuera"), "fuera");
+    assert.equal(slugifySkillName("C:\\tmp\\x"), "c-tmp-x");
+  });
+
+  test("recorta a 64 sin dejar un guion colgando al final", () => {
+    const long = slugifySkillName("a".repeat(70));
+    assert.equal(long.length, 64);
+    const cut = slugifySkillName(`${"a".repeat(64)} b`);
+    assert.ok(!cut.endsWith("-"));
+  });
+
+  test("lo que no deja nada aprovechable da cadena vacía", () => {
+    assert.equal(slugifySkillName("///"), "");
+    assert.equal(slugifySkillName(""), "");
+  });
+});
+
+describe("slugifySkillNameDraft", () => {
+  /** Simula teclear carácter a carácter, que es como lo usa el modal. */
+  function typing(text: string): string {
+    let value = "";
+    for (const ch of text) value = slugifySkillNameDraft(value + ch);
+    return slugifySkillName(value);
+  }
+
+  // El bug que se vio en pantalla: salía "revisarmigracionsql".
+  test("tecleado letra a letra conserva los separadores", () => {
+    assert.equal(typing("Revisar Migración SQL"), "revisar-migracion-sql");
+    assert.equal(typing("Backend API v2"), "backend-api-v2");
+  });
+
+  test("mantiene el guion final para que la siguiente letra no se pegue", () => {
+    assert.equal(slugifySkillNameDraft("revisar "), "revisar-");
+    assert.equal(slugifySkillNameDraft("revisar-"), "revisar-");
+  });
+
+  test("no deja que el nombre empiece por guion", () => {
+    assert.equal(slugifySkillNameDraft(" x"), "x");
+    assert.equal(slugifySkillNameDraft("--x"), "x");
+  });
+
+  test("al enviar, el guion suelto del final se va", () => {
+    assert.equal(slugifySkillName(slugifySkillNameDraft("revisar ")), "revisar");
   });
 });

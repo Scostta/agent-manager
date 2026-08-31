@@ -130,6 +130,13 @@ export const deleteAgent = (id: string) =>
 
 export const listSkills = () => api<Skill[]>("/skills");
 
+/**
+ * Crea el SKILL.md. El destino no se manda: lo decide la API, que la escribe en
+ * su carpeta de skills. Aquí solo van el nombre y la descripción.
+ */
+export const createSkill = (name: string, description: string) =>
+  api<Skill>("/skills", { method: "POST", ...json({ name, description }) });
+
 export const getSkillContent = (id: string) =>
   api<SkillContent>(`/skills/${id}/content`);
 

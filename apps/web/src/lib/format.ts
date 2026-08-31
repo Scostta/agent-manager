@@ -105,3 +105,42 @@ export function describeToolPolicy(policy: {
   if (policy.disallowedTools.length) parts.push(`sin ${policy.disallowedTools.join(", ")}`);
   return parts.length ? parts.join(" · ") : "sin restricción";
 }
+
+/**
+ * El nombre de una skill es también el de su carpeta y el del symlink que se
+ * planta en `.claude/skills/` del workspace, así que la API solo acepta
+ * kebab-case. Esto lo aplica según escribes para que no te rechace el alta por
+ * haber puesto una mayúscula o un espacio.
+ *
+ * Los acentos se transliteran en vez de borrarse: "migración" tiene que quedar
+ * en "migracion", no en "migracin".
+ */
+export function slugifySkillName(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64)
+    .replace(/-+$/g, "");
+}
+
+/**
+ * La variante para mientras escribes: conserva el guion del final.
+ *
+ * Normalizar en cada tecla con la función de arriba se come el separador entre
+ * palabras: al teclear el espacio de "Revisar Migración" el valor queda en
+ * "revisar-", se le quita el guion final por ser un borde, y la siguiente letra
+ * aterriza pegada — "revisarm". Aquí solo se recorta el principio; el final lo
+ * limpia `slugifySkillName` al enviar.
+ */
+export function slugifySkillNameDraft(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+/, "")
+    .slice(0, 64);
+}

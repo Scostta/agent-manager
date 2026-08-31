@@ -128,6 +128,8 @@ apps/
   - La estrategia se detecta automáticamente al crear el proyecto.
 - **Agent** → plantilla de ejecución: nombre, rol, modelo, `systemPrompt`, budget, un set de `Skill` habilitadas y qué herramientas del CLI puede usar (`allowedTools` / `disallowedTools`; vacías = sin restricción).
 - **Skill** → un `SKILL.md` indexado del filesystem. **Nunca guardamos el contenido en BD, solo ruta + hash SHA256.** Si el usuario edita un SKILL.md en disco, el scanner (chokidar) lo detecta y actualiza.
+  - Viven en `SKILLS_ROOT` (por defecto `./skills`), que el cockpit crea al arrancar y escanea siempre: no hay que configurar ninguna ruta. `SKILLS_PATHS` son carpetas *adicionales* y opcionales, para skills que ya tengas en otro sitio.
+  - Se crean y se editan desde la UI; borrarlas es borrar la carpeta y el watcher las desindexa. Al crear, el nombre se valida a kebab-case: además de la carpeta, es el nombre del symlink que se planta en `.claude/skills/` del workspace.
 - **Task** → unidad del kanban. Estados: `todo | in_progress | review | done | blocked`. Puede tener `dependsOn` (otras tasks). Las skills no se declaran aquí: las trae el `Agent` que la ejecuta.
 - **TaskRun** → una ejecución concreta de una Task por un Agent. Separada de Task adrede: permite reintentos y auditoría de tokens. Estados: `queued | running | succeeded | failed | cancelled`. Guarda `branchName` si la estrategia es worktree, y el `sessionId` del CLI para poder retomarla. Una run con `resumedFromId` continúa la sesión de otra: comparte su workspace y su rama, y por eso no los limpia.
 - **ClaudeMd** → contenido markdown con scope `global | project`. El global (solo puede haber uno) se inyecta en el workspace de **todas** las runs; el de un proyecto, solo en las suyas, y va después para poder matizarlo. Hubo un scope `agent` que no consumía nadie: el `systemPrompt` del agente ya es ese sitio.
@@ -240,8 +242,11 @@ agente—, se quitaron los campos que no consumía nadie (`Agent.status`,
 `requiredSkillIds`, el scope `agent`), `apps/web` estrenó tests, la BD se copia
 sola al arrancar y los SKILL.md se editan desde la UI.
 
-Fase 7, la última cerrada: cada agente guarda su color (`Agent.color`) en vez
-de derivarlo del nombre, que hacía que varios salieran iguales.
+Fase 7: cada agente guarda su color (`Agent.color`) en vez de derivarlo del
+nombre, que hacía que varios salieran iguales.
+
+Fase 8, la última cerrada: las skills se crean desde la UI y ya no hay que
+declarar ninguna ruta en el `.env` — el cockpit tiene su carpeta y se la crea.
 
 **El roadmap no tiene pendientes.** Lo que queda en "Cosas que NO se harán" está
 descartado a propósito.

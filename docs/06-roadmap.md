@@ -12,7 +12,7 @@ termina y el log guarda con qué se lanzó.
 El ciclo completo está validado en real: spawn del CLI → stream-json → SSE → UI,
 con tokens y coste registrados, y el trabajo saliendo del worktree al repo.
 
-**Las siete fases están cerradas y no hay pendientes.** Lo que queda al final del
+**Las ocho fases están cerradas y no hay pendientes.** Lo que queda al final del
 documento está descartado a propósito, no aparcado. Antes de proponer trabajo
 nuevo conviene mirar ahí: alguna de las ideas obvias ya tiene su motivo escrito.
 
@@ -76,7 +76,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-298 tests con `node:test`, sin dependencias nuevas: 257 en `apps/api` y 41 en
+320 tests con `node:test`, sin dependencias nuevas: 268 en `apps/api` y 52 en
 `apps/web`. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
@@ -351,6 +351,52 @@ eso obliga a guardar la elección: **`Agent.color`**, hex `#RRGGBB`.
 
 El hash sigue existiendo como respaldo, ya con FNV-1a. Tiene sus tests, y el de
 anagramas es el que falla si alguien vuelve a la suma.
+
+## Fase 8 ✅ — Crear skills desde la UI, sin configurar rutas
+
+Dos quejas de uso, y la primera es la que manda:
+
+**"Para las skills hay que poner un path en el `.env`; el CLAUDE.md no lo
+necesita y es más cómodo."** Tenía razón en el fondo aunque `SKILLS_PATHS` ya
+tuviera un default: el modelo mental era *"dime dónde tienes tus skills"*, y eso
+es trabajo del usuario antes de poder empezar. Ahora el cockpit tiene su propia
+carpeta (`SKILLS_ROOT`, por defecto `./skills`) que **se crea sola al arrancar**,
+como ya hacían `logs`, `backups` y `workspaces`, y que se escanea siempre.
+
+`SKILLS_PATHS` deja de ser el sitio donde viven las skills y pasa a ser
+*carpetas adicionales*, opcional y normalmente vacía: solo la tocas si ya tienes
+skills en otro lado, como `~/.claude/skills`. Las dos listas se deduplican —en
+Windows sin distinguir mayúsculas— para no escanear la misma carpeta dos veces.
+
+**Crear una skill desde la UI.** Desde la Fase 6 se podía *editar* un SKILL.md
+pero no *crearlo*, y el motivo que quedó escrito ("eso es tu editor y un
+`mkdir`") se sostenía mucho peor con media UI ya hecha. `POST /skills` pide solo
+nombre y descripción, escribe la plantilla y devuelve la skill **ya indexada**,
+que es lo que permite abrirla en el Monaco de al lado sin esperar a chokidar.
+
+Las decisiones que importan:
+
+- **El destino no es un parámetro.** El endpoint no acepta ruta: escribe siempre
+  dentro de `SKILLS_ROOT`. Dejar elegir carpeta convertiría "crear una skill" en
+  "escribe este fichero donde yo te diga" con los permisos de la API.
+- **El nombre se valida a kebab-case.** No es cosmética: ese nombre es el de la
+  carpeta y, sobre todo, el del symlink que `injectWorkspaceResources` planta en
+  `.claude/skills/<name>` del workspace. Un `../..` ahí escribiría fuera. Tiene
+  test, y de los que fallan si quitas la guarda.
+- **La descripción va por `JSON.stringify` en el frontmatter.** Es texto libre y
+  un `:` o unas comillas romperían el YAML: la skill quedaría creada en disco
+  pero sin indexar, que es el fallo silencioso caro.
+- **No se pisa nada.** Se comprueba el nombre en BD *y* el fichero en disco: una
+  carpeta suelta que el índice no conoce se machacaría sin avisar.
+
+Se queda fuera **borrar desde la UI**: sigue siendo borrar la carpeta, y el
+watcher la desindexa solo.
+
+El slug se aplica según escribes, y ahí salió un bug que solo se ve usándolo:
+normalizar en cada tecla se comía el separador entre palabras —"Revisar
+Migración SQL" quedaba en "revisarmigracionsql"— porque el guion final se
+recortaba como si fuera un borde. Hay una variante para el borrador que lo
+conserva y su test simula el tecleo letra a letra.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 
