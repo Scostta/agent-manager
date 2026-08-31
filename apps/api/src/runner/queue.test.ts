@@ -74,16 +74,44 @@ async function seedTask(): Promise<{ taskId: string; agentId: string }> {
   return { taskId: task.id, agentId: agent.id };
 }
 
-async function waitForRun(runId: string, status: string, timeoutMs = 10_000): Promise<void> {
+async function waitFor(
+  label: string,
+  read: () => Promise<string | undefined>,
+  expected: string,
+  timeoutMs = 10_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
+  let last: string | undefined;
   while (Date.now() < deadline) {
-    const run = await db.taskRun.findUnique({ where: { id: runId } });
-    if (run?.status === status) return;
+    last = await read();
+    if (last === expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  const run = await db.taskRun.findUnique({ where: { id: runId } });
-  throw new Error(`La run se quedó en '${run?.status}' en vez de '${status}'`);
+  throw new Error(`${label} se quedó en '${last}' en vez de '${expected}'`);
 }
+
+const waitForRun = (runId: string, status: string): Promise<void> =>
+  waitFor(
+    "La run",
+    async () => (await db.taskRun.findUnique({ where: { id: runId } }))?.status,
+    status,
+  );
+
+/**
+ * El executor marca la run y la task en dos escrituras seguidas: primero
+ * `taskRun.update`, después `settleTaskStatus`. Entre las dos hay un instante
+ * en el que la run ya está 'succeeded' y la task sigue 'in_progress'. Esperar
+ * la run para afirmar sobre la task caía justo ahí una de cada diez veces.
+ *
+ * Como la task es la que se escribe la última, esperarla a ella garantiza
+ * también que la run ya terminó.
+ */
+const waitForTask = (taskId: string, status: string): Promise<void> =>
+  waitFor(
+    "La task",
+    async () => (await db.task.findUnique({ where: { id: taskId } }))?.status,
+    status,
+  );
 
 beforeEach(async () => {
   // stopEverything deja la cola en pausa a propósito: cada test parte de cero.
@@ -109,7 +137,10 @@ describe("enqueueTaskRun", () => {
     const enCurso = await db.task.findUniqueOrThrow({ where: { id: taskId } });
     assert.ok(["in_progress", "review"].includes(enCurso.status));
 
-    await waitForRun(runId, "succeeded");
+    await waitForTask(taskId, "review");
+
+    const run = await db.taskRun.findUniqueOrThrow({ where: { id: runId } });
+    assert.equal(run.status, "succeeded");
     const task = await db.task.findUniqueOrThrow({ where: { id: taskId } });
     assert.equal(task.status, "review");
   });
