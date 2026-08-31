@@ -35,6 +35,11 @@ model Agent {
   // hasta ahora. Acepta patrones del CLI, p.ej. "Bash(git *)".
   allowedTools    String?
   disallowedTools String?
+  // Color de identidad del avatar, hex "#RRGGBB". Lo elige la UI al crear el
+  // agente (el menos usado de la paleta) y se puede cambiar a mano. null en las
+  // filas anteriores a esta columna: el frontend cae entonces en el hash del
+  // nombre, que no garantiza que no se repita.
+  color           String?
   skills        AgentSkill[]
   tasks         Task[]
   runs          TaskRun[]

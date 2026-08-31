@@ -235,10 +235,13 @@ Fase 5: retomar sesiones con `--resume` en vez de relanzar de cero,
 herramientas permitidas por agente, aviso del navegador al terminar una run y
 registro en el log de con qué se lanzó.
 
-Fase 6, la última cerrada: se conectó el `CLAUDE.md` global —que se guardaba y
-no lo veía ningún agente—, se quitaron los campos que no consumía nadie
-(`Agent.status`, `requiredSkillIds`, el scope `agent`), `apps/web` estrenó
-tests, la BD se copia sola al arrancar y los SKILL.md se editan desde la UI.
+Fase 6: se conectó el `CLAUDE.md` global —que se guardaba y no lo veía ningún
+agente—, se quitaron los campos que no consumía nadie (`Agent.status`,
+`requiredSkillIds`, el scope `agent`), `apps/web` estrenó tests, la BD se copia
+sola al arrancar y los SKILL.md se editan desde la UI.
+
+Fase 7, la última cerrada: cada agente guarda su color (`Agent.color`) en vez
+de derivarlo del nombre, que hacía que varios salieran iguales.
 
 **El roadmap no tiene pendientes.** Lo que queda en "Cosas que NO se harán" está
 descartado a propósito.

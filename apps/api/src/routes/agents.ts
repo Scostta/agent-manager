@@ -16,12 +16,25 @@ const ToolList = z
   .nullable()
   .transform((tools) => (tools?.length ? JSON.stringify([...new Set(tools)]) : null));
 
+/**
+ * Color del avatar. Quien lo elige es la UI, que es la única que conoce la
+ * paleta y qué colores están cogidos; aquí solo se comprueba que sea un hex y
+ * no texto libre, porque acaba metido en un style del frontend.
+ * null es válido y significa "derívalo del nombre".
+ */
+const AgentColor = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'El color debe ser un hex tipo "#7B6CF6"')
+  .nullable();
+
 const AgentInput = z.object({
   name: z.string().min(1),
   role: z.string().min(1),
   model: z.string().min(1),
   systemPrompt: z.string().min(1),
   maxBudgetUsd: z.number().positive().optional(),
+  color: AgentColor.optional(),
   skillIds: z.array(z.string()).optional(),
   allowedTools: ToolList.optional(),
   disallowedTools: ToolList.optional(),

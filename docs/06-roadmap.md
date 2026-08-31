@@ -12,7 +12,7 @@ termina y el log guarda con qué se lanzó.
 El ciclo completo está validado en real: spawn del CLI → stream-json → SSE → UI,
 con tokens y coste registrados, y el trabajo saliendo del worktree al repo.
 
-**Las seis fases están cerradas y no hay pendientes.** Lo que queda al final del
+**Las siete fases están cerradas y no hay pendientes.** Lo que queda al final del
 documento está descartado a propósito, no aparcado. Antes de proponer trabajo
 nuevo conviene mirar ahí: alguna de las ideas obvias ya tiene su motivo escrito.
 
@@ -76,7 +76,7 @@ run ya está integrada. La rama muere cuando la task pasa a `done`.
 
 ## Tests
 
-287 tests con `node:test`, sin dependencias nuevas: 257 en `apps/api` y 30 en
+298 tests con `node:test`, sin dependencias nuevas: 257 en `apps/api` y 41 en
 `apps/web`. Además de la lógica pura ya
 están cubiertos los sitios donde salieron los bugs caros:
 
@@ -321,6 +321,36 @@ Estrictamente posterior, no "desde": con `gte` cada reconexión reavisaría de l
 última run. Y las que llegan por el stream se marcan como vistas aunque no se
 notifiquen (pestaña delante, o canceladas), para que la repesca no las saque
 después.
+
+## Fase 7 ✅ — Color propio para cada agente
+
+Salió de mirar la pantalla de agentes: tres de los cuatro salían del mismo
+verde.
+
+`agentColor()` sumaba los códigos de carácter del nombre y hacía módulo 7.
+Sumar ignora la posición —cualquier anagrama colisiona— y con nombres cortos y
+parecidos el reparto se apelotona: `Reviewer`, `Tester` y `Backend` daban los
+tres el mismo resto.
+
+Arreglar el hash no bastaba. Con 7 colores y 5 agentes hay ~65% de que dos
+choquen por puro cumpleaños, así que un hash, por bueno que sea, nunca puede
+prometer que no se repitan. Para eso hay que repartir conociendo el conjunto, y
+eso obliga a guardar la elección: **`Agent.color`**, hex `#RRGGBB`.
+
+- **Elige la UI, no la API.** Es la única que conoce la paleta y qué colores
+  están cogidos. `pickAgentColor()` propone el menos usado —mientras queden
+  libres, siempre uno sin estrenar— y a partir de ahí manda la muestra que
+  pulses. La API solo comprueba que sea un hex: ese valor acaba en un `style`
+  del frontend, y ahí no puede entrar texto libre.
+- **La columna es nullable y no se rellenó a la fuerza.** Una fila sin color cae
+  en el hash del nombre, que es exactamente como se veían todas hasta ahora. Al
+  abrir la ficha de un agente viejo se siembra el color que ya se le ve, así que
+  guardarlo no le cambia el aspecto de golpe.
+- **La paleta pasa de 7 a 9.** No arregla nada por sí sola, pero deja margen
+  antes de dar la segunda vuelta.
+
+El hash sigue existiendo como respaldo, ya con FNV-1a. Tiene sus tests, y el de
+anagramas es el que falla si alguien vuelve a la suma.
 
 ## Cosas que NO se harán (a menos que cambie el objetivo)
 

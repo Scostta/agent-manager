@@ -585,7 +585,7 @@ export function RunViewer({ runId }: { runId: string }): ReactElement {
           >
             <Icon name="chevronRight" size={14} className="rotate-180" />
           </Link>
-          <AgentAvatar name={run.agent.name} size={28} />
+          <AgentAvatar name={run.agent.name} color={run.agent.color} size={28} />
           <div className="min-w-0">
             <div className="truncate-1 text-base font-medium text-txt-1">
               {run.task.title}
