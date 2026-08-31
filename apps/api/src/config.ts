@@ -27,12 +27,33 @@ function expand(p: string): string {
   return path.resolve(p);
 }
 
+/**
+ * Windows compara rutas sin distinguir mayúsculas, así que dos formas de
+ * escribir la misma carpeta se escanearían dos veces.
+ */
+function dedupePaths(paths: string[]): string[] {
+  const seen = new Set<string>();
+  return paths.filter((p) => {
+    const key = process.platform === "win32" ? p.toLowerCase() : p;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function list(raw: string): string[] {
   return raw
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
 }
+
+/**
+ * La carpeta de skills que gestiona el cockpit. Es donde escribe las que creas
+ * desde la UI y se crea sola al arrancar: por eso no hay que configurar ninguna
+ * ruta para empezar a usar skills, igual que no hace falta para los CLAUDE.md.
+ */
+const skillsRoot = expand(process.env.SKILLS_ROOT ?? "./skills");
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
@@ -45,7 +66,16 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL ?? "file:./dev.db",
   workspacesRoot: expand(process.env.WORKSPACES_ROOT ?? "./workspaces"),
   logsRoot: expand(process.env.LOGS_ROOT ?? "./logs"),
-  skillsPaths: list(process.env.SKILLS_PATHS ?? "./skills").map(expand),
+  skillsRoot,
+  /**
+   * Carpetas *adicionales* a indexar, para skills que ya tengas en otro sitio
+   * (p.ej. ~/.claude/skills). Opcional y de solo lectura en la práctica: lo que
+   * se crea desde la UI va siempre a `skillsRoot`, que ya está aquí dentro.
+   */
+  skillsPaths: dedupePaths([
+    skillsRoot,
+    ...list(process.env.SKILLS_PATHS ?? "").map(expand),
+  ]),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   claudeCli: process.env.CLAUDE_CLI ?? "claude",
   /**

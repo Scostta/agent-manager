@@ -54,3 +54,57 @@ export function assertKeepsName(content: string, currentName: string): void {
     `Esta skill se llama "${currentName}" y el frontmatter dice "${next}". Renombrar desde aquí dejaría dos entradas apuntando al mismo fichero: cambia el nombre en disco y vuelve a escanear.`,
   );
 }
+
+/**
+ * El nombre no es solo una etiqueta: es el nombre de la carpeta que se crea en
+ * disco y, sobre todo, el del symlink que `injectWorkspaceResources` planta en
+ * `.claude/skills/<name>` del workspace. Un "../.." ahí escribiría fuera del
+ * workspace, así que se valida antes de dejar crear nada.
+ *
+ * Kebab-case porque es lo que espera el CLI y lo que ya usan las carpetas
+ * existentes; el límite de 64 es para no chocar con MAX_PATH en Windows, donde
+ * este nombre se concatena a la ruta ya larga del workspace.
+ */
+const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function assertValidSkillName(name: string): void {
+  if (!name) throw new SkillEditError("La skill necesita un nombre.");
+  if (name.length > 64) {
+    throw new SkillEditError("El nombre no puede pasar de 64 caracteres.");
+  }
+  if (!SKILL_NAME_RE.test(name)) {
+    throw new SkillEditError(
+      `"${name}" no vale como nombre: usa minúsculas, números y guiones (p.ej. "revisar-migraciones").`,
+    );
+  }
+}
+
+/**
+ * El SKILL.md de partida. Lleva ya el frontmatter que el scanner necesita para
+ * indexarla —sin `name` cogería el de la carpeta y sin `description` la ficha
+ * saldría vacía— y un cuerpo mínimo que se edita después en el mismo Monaco.
+ *
+ * La descripción va por JSON.stringify: es texto libre del usuario y un `:` o
+ * unas comillas sueltas romperían el YAML del frontmatter, que es justo lo que
+ * `assertParseable` rechaza al guardar.
+ */
+export function skillTemplate(name: string, description: string): string {
+  return `---
+name: ${name}
+description: ${JSON.stringify(description)}
+tags: []
+---
+
+# ${name}
+
+${description}
+
+## Cuándo usarla
+
+Describe aquí en qué situaciones el agente debería aplicar esta skill.
+
+## Cómo
+
+Los pasos concretos.
+`;
+}

@@ -1,3 +1,5 @@
+import fsp from "node:fs/promises";
+
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { scanSkills, watchSkills } from "./skills/scanner.js";
@@ -8,6 +10,11 @@ import { backupOnStartup } from "./backup/snapshot.js";
 import { killActiveRuns } from "./runner/executor.js";
 
 const app = await buildApp();
+
+// La carpeta de skills del cockpit se crea sola, como logs y backups: es lo que
+// permite empezar sin configurar ninguna ruta. Va antes del watcher porque
+// chokidar no vigila un directorio que todavía no existe.
+await fsp.mkdir(config.skillsRoot, { recursive: true });
 
 const skillsWatcher = watchSkills();
 

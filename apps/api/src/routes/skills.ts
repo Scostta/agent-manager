@@ -1,17 +1,26 @@
 import type { FastifyInstance } from "fastify";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 
 import { db } from "../db.js";
+import { config } from "../config.js";
 import { scanSkills, upsertSkillFromFile } from "../skills/scanner.js";
 import {
   SkillEditError,
   assertKeepsName,
   assertParseable,
+  assertValidSkillName,
   isInsideSkillsPaths,
+  skillTemplate,
 } from "../skills/edit.js";
 
 const ContentInput = z.object({ content: z.string() });
+
+const CreateInput = z.object({
+  name: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+});
 
 export async function skillRoutes(app: FastifyInstance) {
   app.get("/skills", async () => {
@@ -69,6 +78,60 @@ export async function skillRoutes(app: FastifyInstance) {
 
     const updated = await db.skill.findUniqueOrThrow({ where: { id } });
     return { ...updated, tags: JSON.parse(updated.tags) as string[] };
+  });
+
+  /**
+   * Crea la skill en la carpeta del cockpit (`SKILLS_ROOT`), no en cualquier
+   * ruta que se pida: el destino no es un parámetro del endpoint precisamente
+   * para que crear desde la UI no pueda escribir donde le apetezca.
+   *
+   * Se devuelve ya indexada, igual que al guardar: el watcher la vería, pero la
+   * UI necesita el id para abrirla en el editor justo después.
+   */
+  app.post("/skills", async (req, reply) => {
+    const { name, description } = CreateInput.parse(req.body);
+
+    try {
+      assertValidSkillName(name);
+    } catch (err) {
+      if (err instanceof SkillEditError) return reply.badRequest(err.message);
+      throw err;
+    }
+
+    // El nombre es @unique en BD, pero comprobarlo aquí da un mensaje que se
+    // entiende en vez de un choque de constraint de Prisma.
+    const clash = await db.skill.findUnique({ where: { name } });
+    if (clash) {
+      return reply.badRequest(
+        `Ya hay una skill llamada "${name}" en ${clash.filePath}.`,
+      );
+    }
+
+    const dir = path.join(config.skillsRoot, name);
+    const filePath = path.join(dir, "SKILL.md");
+
+    // Una carpeta suelta sin indexar (creada a mano, o de una skill borrada de
+    // la BD pero no del disco) se machacaría en silencio si no se mira.
+    try {
+      await fs.access(filePath);
+      return reply.badRequest(`${filePath} ya existe en disco.`);
+    } catch {
+      // no existe, que es lo que queremos
+    }
+
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(filePath, skillTemplate(name, description), "utf8");
+    } catch (err: any) {
+      return reply.internalServerError(
+        `No se pudo crear ${filePath}: ${err.code ?? err.message}`,
+      );
+    }
+
+    await upsertSkillFromFile(filePath);
+
+    const created = await db.skill.findUniqueOrThrow({ where: { name } });
+    return reply.code(201).send({ ...created, tags: JSON.parse(created.tags) as string[] });
   });
 
   app.post("/skills/rescan", async () => {

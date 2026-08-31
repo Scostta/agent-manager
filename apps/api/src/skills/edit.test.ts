@@ -10,7 +10,16 @@ import path from "node:path";
 import { buildApp } from "../app.js";
 import { config } from "../config.js";
 import { db } from "../db.js";
-import { assertKeepsName, assertParseable, isInsideSkillsPaths } from "./edit.js";
+import matter from "gray-matter";
+
+import {
+  SkillEditError,
+  assertKeepsName,
+  assertParseable,
+  assertValidSkillName,
+  isInsideSkillsPaths,
+  skillTemplate,
+} from "./edit.js";
 
 import type { FastifyInstance } from "fastify";
 
@@ -188,6 +197,146 @@ tags: [testing, docs]
   test("un body sin content es un 400, no un 500", async () => {
     const { id } = await seedSkill();
     const res = await app.inject({ method: "PATCH", url: `/skills/${id}/content`, payload: {} });
+    assert.equal(res.statusCode, 400);
+  });
+});
+
+describe("assertValidSkillName", () => {
+  test("acepta kebab-case", () => {
+    for (const name of ["revisor", "revisar-migraciones", "sql2", "a"]) {
+      assert.doesNotThrow(() => assertValidSkillName(name));
+    }
+  });
+
+  // El motivo de que esta guarda exista: el nombre acaba en un path.join
+  // dentro de .claude/skills del workspace. Un separador o un ".." ahí
+  // plantaría el symlink fuera del workspace.
+  test("rechaza cualquier cosa que sea una ruta", () => {
+    for (const name of ["../fuera", "a/b", "a\b", "..", ".", "C:/tmp/x"]) {
+      assert.throws(() => assertValidSkillName(name), SkillEditError, name);
+    }
+  });
+
+  test("rechaza mayúsculas, espacios y guiones sueltos", () => {
+    for (const name of ["Revisor", "mi skill", "-x", "x-", "a--b", "ñ"]) {
+      assert.throws(() => assertValidSkillName(name), SkillEditError, name);
+    }
+  });
+
+  test("rechaza el vacío y lo demasiado largo", () => {
+    assert.throws(() => assertValidSkillName(""), SkillEditError);
+    assert.throws(() => assertValidSkillName("a".repeat(65)), SkillEditError);
+    assert.doesNotThrow(() => assertValidSkillName("a".repeat(64)));
+  });
+});
+
+describe("skillTemplate", () => {
+  test("el frontmatter que genera es parseable e indexable", () => {
+    const md = skillTemplate("revisar-migraciones", "Revisa migraciones de Prisma");
+    assert.doesNotThrow(() => assertParseable(md));
+    const { data } = matter(md);
+    assert.equal(data.name, "revisar-migraciones");
+    assert.equal(data.description, "Revisa migraciones de Prisma");
+    assert.deepEqual(data.tags, []);
+  });
+
+  // Una descripción con dos puntos o comillas rompería el YAML, y la skill
+  // quedaría creada en disco pero sin indexar.
+  test("una descripción con caracteres de YAML no rompe el frontmatter", () => {
+    for (const description of [
+      "Hace esto: y lo otro",
+      'Con "comillas" dentro',
+      "Con 'simples' y # almohadilla",
+      "Multi\nlínea",
+    ]) {
+      const md = skillTemplate("x", description);
+      assert.doesNotThrow(() => assertParseable(md), description);
+      assert.equal(matter(md).data.description, description);
+    }
+  });
+});
+
+describe("POST /skills", () => {
+  test("crea el SKILL.md en SKILLS_ROOT y lo devuelve ya indexado", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/skills",
+      payload: { name: "revisar-migraciones", description: "Revisa migraciones" },
+    });
+
+    assert.equal(res.statusCode, 201);
+    const body = res.json();
+    assert.equal(body.name, "revisar-migraciones");
+    assert.deepEqual(body.tags, []);
+
+    const expected = path.join(config.skillsRoot, "revisar-migraciones", "SKILL.md");
+    assert.equal(path.resolve(body.filePath), path.resolve(expected));
+    assert.match(await fs.readFile(expected, "utf8"), /name: revisar-migraciones/);
+
+    // Indexada de verdad, no solo escrita: es lo que permite abrirla en el
+    // editor inmediatamente después sin esperar a chokidar.
+    const row = await db.skill.findUnique({ where: { name: "revisar-migraciones" } });
+    assert.ok(row);
+    assert.equal(row.contentHash.length, 64);
+  });
+
+  test("el nombre inválido se rechaza antes de tocar el disco", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/skills",
+      payload: { name: "../fuera", description: "x" },
+    });
+
+    assert.equal(res.statusCode, 400);
+
+    // Lo que de verdad hay que comprobar: que el ".." no haya escrito fuera de
+    // la carpeta de skills.
+    const escaped = path.join(config.skillsRoot, "..", "fuera");
+    await assert.rejects(fs.access(escaped));
+  });
+
+  test("no pisa una skill que ya existe", async () => {
+    const payload = { name: "duplicada", description: "primera" };
+    assert.equal((await app.inject({ method: "POST", url: "/skills", payload })).statusCode, 201);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/skills",
+      payload: { name: "duplicada", description: "segunda" },
+    });
+    assert.equal(res.statusCode, 400);
+
+    // Y la de verdad sigue intacta.
+    const md = await fs.readFile(
+      path.join(config.skillsRoot, "duplicada", "SKILL.md"),
+      "utf8",
+    );
+    assert.match(md, /primera/);
+  });
+
+  // Una carpeta suelta en disco que la BD no conoce: sin la comprobación de
+  // fs.access se machacaría sin avisar.
+  test("no pisa un SKILL.md que está en disco pero no indexado", async () => {
+    const dir = path.join(config.skillsRoot, "huerfana");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "SKILL.md"), "contenido a mano", "utf8");
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/skills",
+      payload: { name: "huerfana", description: "nueva" },
+    });
+
+    assert.equal(res.statusCode, 400);
+    assert.equal(await fs.readFile(path.join(dir, "SKILL.md"), "utf8"), "contenido a mano");
+  });
+
+  test("la descripción es obligatoria", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/skills",
+      payload: { name: "sin-descripcion", description: "   " },
+    });
     assert.equal(res.statusCode, 400);
   });
 });

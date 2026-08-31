@@ -15,6 +15,7 @@ import {
   cn,
 } from "@/components/ui/primitives.client";
 import { useToast } from "@/components/ui/toast.client";
+import { NewSkillModal } from "./new-skill-modal.client";
 import { getSkillContent, rescanSkills, updateSkillContent } from "@/lib/api";
 import { formatRelative, shortenPath } from "@/lib/format";
 import { keys, useSkills } from "@/lib/hooks";
@@ -227,6 +228,7 @@ export function SkillsView(): ReactElement {
   const [tag, setTag] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const tags = useMemo(() => {
     const all = new Set<string>();
@@ -264,6 +266,19 @@ export function SkillsView(): ReactElement {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      <NewSkillModal
+        open={creating}
+        onClose={() => setCreating(false)}
+        onCreated={(skill) => {
+          // Refresca el catálogo y deja seleccionada la nueva, que sale con la
+          // plantilla puesta y lista para editar en el Monaco de al lado.
+          void mutate(keys.skills);
+          setSelectedId(skill.id);
+          setQuery("");
+          setTag(null);
+        }}
+      />
+
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border-1 px-7 py-4">
         <div>
           <h1 className="text-lg font-semibold text-txt-1">Skills</h1>
@@ -273,15 +288,25 @@ export function SkillsView(): ReactElement {
               : `${skills?.length ?? 0} SKILL.md indexados desde el filesystem`}
           </p>
         </div>
-        <Button
-          variant="default"
-          size="sm"
-          icon="refresh"
-          onClick={() => void rescan()}
-          loading={rescanning}
-        >
-          Rescanear
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="default"
+            size="sm"
+            icon="refresh"
+            onClick={() => void rescan()}
+            loading={rescanning}
+          >
+            Rescanear
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            icon="plus"
+            onClick={() => setCreating(true)}
+          >
+            Nueva skill
+          </Button>
+        </div>
       </div>
 
       {error && (

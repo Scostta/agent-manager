@@ -35,6 +35,10 @@ for (const dir of [SKILLS_DIR, WORKSPACES_DIR, LOGS_DIR, SCRATCH_DIR]) {
 }
 
 process.env.DATABASE_URL = `file:${TEST_DB_PATH}`;
+// Las dos: SKILLS_ROOT es donde escribe el alta desde la UI, y si se dejara
+// al default (./skills, relativo al cwd) un test crearía skills en la carpeta
+// real del usuario.
+process.env.SKILLS_ROOT = SKILLS_DIR;
 process.env.SKILLS_PATHS = SKILLS_DIR;
 process.env.WORKSPACES_ROOT = WORKSPACES_DIR;
 process.env.LOGS_ROOT = LOGS_DIR;
